@@ -1,0 +1,1025 @@
+package s3db
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"sort"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/request"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/jrhy/mast"
+	s3Persist "github.com/jrhy/mast/persist/s3"
+	"github.com/jrhy/mast/persist/s3test"
+	"github.com/jrhy/s3db/internal/crdt"
+	"github.com/minio/blake2b-simd"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+var ctx = context.Background()
+
+func TestS3Copy(t *testing.T) {
+	c, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+
+	const (
+		prefix = "prefix/"
+		src    = "foo/123/456"
+		dst    = "bar/456/789"
+	)
+	p := s3Persist.NewPersist(c, c.Endpoint, bucketName, prefix)
+	err := p.Store(ctx, src, []byte("hello"))
+	require.NoError(t, err)
+	loaded, err := p.Load(ctx, src)
+	require.NoError(t, err)
+	require.Equal(t, loaded, []byte("hello"))
+
+	_, err = c.CopyObject(&s3.CopyObjectInput{
+		Bucket:     &bucketName,
+		CopySource: aws.String(bucketName + "/" + /*url.PathEscape(*/ prefix + src /*)*/),
+		Key:        aws.String(prefix + dst),
+		Expires:    aws.Time(time.Now().AddDate(10, 0, 0)),
+	})
+	require.NoError(t, err)
+
+	_, err = c.DeleteObject(&s3.DeleteObjectInput{
+		Bucket: &bucketName,
+		Key:    aws.String(prefix + src),
+	})
+	require.NoError(t, err)
+
+	loaded, err = p.Load(ctx, dst)
+	require.NoError(t, err)
+	require.Equal(t, loaded, []byte("hello"))
+
+	loaded, err = p.Load(ctx, src)
+	require.Error(t, err)
+	ae := err.(awserr.Error)
+	require.NotNil(t, ae)
+	require.Equal(t, s3.ErrCodeNoSuchKey, ae.Code())
+	require.Nil(t, loaded)
+}
+
+func TestListRoots_Empty(t *testing.T) {
+	c, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg := Config{
+		Storage: &S3BucketInfo{
+			EndpointURL: c.Endpoint,
+			BucketName:  bucketName,
+			Prefix:      "prefix",
+		},
+		KeysLike:     1234,
+		ValuesLike:   "hi",
+		BranchFactor: 4,
+	}
+	s, err := Open(ctx, c, cfg, OpenOptions{}, time.Now())
+	require.NoError(t, err)
+	require.Empty(t, s.crdt.MergeSources)
+	roots, err := s.listRoots(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []string{}, roots)
+}
+
+func TestS3DBHappyCase(t *testing.T) {
+	c, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg := Config{
+		Storage:    &S3BucketInfo{c.Endpoint, bucketName, "happyDB"},
+		KeysLike:   1234,
+		ValuesLike: "hi",
+	}
+	s, err := Open(ctx, c, cfg, OpenOptions{}, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, uint64(0), s.Size())
+	require.Nil(t, s.crdt.Source)
+	require.Empty(t, s.crdt.MergeSources)
+	s2, err := Open(ctx, c, cfg, OpenOptions{}, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, uint64(0), s2.Size())
+	require.Nil(t, s2.crdt.Source)
+	require.Empty(t, s2.crdt.MergeSources)
+
+	err = s.Set(ctx, time.Now(), 1, "yo")
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), s.Size())
+	root, err := s.Commit(ctx)
+	require.NoError(t, err)
+	roots, err := s.listRoots(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []string{*root}, roots)
+
+	err = s2.Set(ctx, time.Now(), 2, "yoyo")
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), s2.Size())
+	root2, err := s2.Commit(ctx)
+	require.NoError(t, err)
+	roots, err = s.listRoots(ctx)
+	require.NoError(t, err)
+	sort.Strings(roots)
+	expected := []string{*root, *root2}
+	sort.Strings(expected)
+	require.EqualValues(t, expected, roots)
+
+	sMerged, err := Open(ctx, c, cfg, OpenOptions{}, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), sMerged.Size())
+	require.False(t, sMerged.IsDirty())
+	var v1, v2 string
+	ok, err := sMerged.Get(ctx, 1, &v1)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "yo", v1)
+	ok, err = sMerged.Get(ctx, 2, &v2)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "yoyo", v2)
+	roots, err = s.listRoots(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(roots))
+
+	err = sMerged.Set(ctx, time.Now(), 5, "foo")
+	require.NoError(t, err)
+	require.True(t, sMerged.IsDirty())
+	sMerged.Cancel()
+}
+
+type screwyS3 struct {
+	s3.S3
+	hideBucketPath map[string]string
+	hidden         map[string]map[string][]byte
+}
+
+func (s *screwyS3) StartHiding(bucketName, prefix string) {
+	if _, ok := s.hideBucketPath[bucketName]; ok {
+		panic("already hiding")
+	}
+	if s.hideBucketPath == nil {
+		s.hideBucketPath = map[string]string{}
+	}
+	s.hideBucketPath[bucketName] = prefix
+	if s.hidden == nil {
+		s.hidden = map[string]map[string][]byte{
+			bucketName: {},
+		}
+	}
+}
+
+func (s *screwyS3) Unhide() {
+	for bucketName, m := range s.hidden {
+		for key, data := range m {
+			_, err := s.S3.PutObject(&s3.PutObjectInput{
+				Bucket: &bucketName,
+				Key:    &key,
+				Body:   bytes.NewReader(data),
+			})
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+	s.hideBucketPath = nil
+}
+
+func (s *screwyS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInput, opts ...request.Option) (*s3.PutObjectOutput, error) {
+	if path, ok := s.hideBucketPath[*input.Bucket]; ok {
+		if strings.HasPrefix(*input.Key, path) {
+			data, err := ioutil.ReadAll(input.Body)
+			if err != nil {
+				panic(err)
+			}
+			s.hidden[*input.Bucket][*input.Key] = data
+			return nil, nil
+		}
+	}
+	return s.S3.PutObjectWithContext(ctx, input, opts...)
+}
+
+func TestDelayedNode(t *testing.T) {
+	realC, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg := Config{
+		Storage:    &S3BucketInfo{realC.Endpoint, bucketName, "delayedNodeDB"},
+		KeysLike:   1234,
+		ValuesLike: "hi",
+	}
+	c := &screwyS3{S3: *realC}
+	s, err := Open(ctx, c, cfg, OpenOptions{}, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, uint64(0), s.Size())
+	require.Empty(t, s.crdt.MergeSources)
+
+	err = s.Set(ctx, time.Now(), 1, "yo")
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), s.Size())
+	sp := s.persist.(*persistEncryptor)
+	c.StartHiding(sp.BucketName, sp.Prefix)
+	v1, err := s.Commit(ctx)
+	require.NoError(t, err)
+	roots, err := s.listRoots(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(roots), "saved root should be visible")
+
+	// opening, with supposedly-unreadable node that should be silently skipped
+	s, err = Open(ctx, c, cfg, OpenOptions{}, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, uint64(0), s.Size())
+	require.Equal(t, 1, s.unmergeableRoots)
+	require.Empty(t, s.crdt.MergeSources)
+	c.Unhide()
+
+	// opening, can now read all blocks
+	s, err = Open(ctx, c, cfg, OpenOptions{}, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), s.Size())
+	require.Equal(t, 0, s.unmergeableRoots)
+	require.EqualValues(t, []string{*v1}, s.crdt.MergeSources)
+}
+
+func dbgprintf(f string, args ...interface{}) {
+	if false {
+		fmt.Printf(f, args...)
+	}
+}
+
+type TestTime time.Time
+
+func newTestTime() TestTime {
+	t1, err := time.Parse("Mon Jan 2 15:04:05 -0700 MST 2006", "Mon Jan 2 15:04:05 -0700 MST 2006")
+	if err != nil {
+		panic(err)
+	}
+	return TestTime(t1)
+}
+
+func (t *TestTime) next() time.Time {
+	*t = TestTime(time.Time(*t).Add(1 * time.Second))
+	return time.Time(*t)
+}
+
+func TestVersionGraph(t *testing.T) {
+	tm := newTestTime()
+	c, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg := Config{
+		Storage:      &S3BucketInfo{c.Endpoint, bucketName, "versionGraph"},
+		KeysLike:     1234,
+		ValuesLike:   "hi",
+		BranchFactor: 4,
+	}
+	cfg.CustomRootPrefix = "s~"
+	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	branchFactor := int(s.crdt.Mast.BranchFactor())
+	require.Equal(t, branchFactor, int(cfg.BranchFactor))
+	for i := 0; i < branchFactor+1; i++ {
+		err := s.Set(ctx, tm.next(), i, "")
+		require.NoError(t, err)
+	}
+	require.Equal(t, uint64(branchFactor+1), s.Size())
+	require.Equal(t, 1, s.Height())
+	sRoot, err := s.Commit(ctx)
+	require.NoError(t, err)
+
+	cfg.CustomRootPrefix = "sModifyLeaf~"
+	s2ModifyLeaf, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	s2ModifyRoot, err := s2ModifyLeaf.Clone(ctx)
+	s2ModifyRoot.cfg.CustomRootPrefix = "s2ModifyRoot~"
+	require.NoError(t, err)
+
+	err = s2ModifyLeaf.Set(ctx, tm.next(), 1, "goo")
+	require.NoError(t, err)
+	s2ModifyLeafRoot, err := s2ModifyLeaf.Commit(ctx)
+	require.NoError(t, err)
+
+	err = s2ModifyRoot.Set(ctx, tm.next(), branchFactor, "goo")
+	require.NoError(t, err)
+	s2ModifyRootRoot, err := s2ModifyRoot.Commit(ctx)
+	require.NoError(t, err)
+
+	cfg.CustomRootPrefix = "sMerged~"
+	sMerged, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	sMergedRoot, err := sMerged.Commit(ctx)
+	require.NoError(t, err)
+	var actual string
+	_, err = sMerged.Get(ctx, 1, &actual)
+	require.Equal(t, "goo", actual)
+	_, err = sMerged.Get(ctx, branchFactor, &actual)
+	require.Equal(t, "goo", actual)
+	require.NoError(t, err)
+
+	cfg.CustomRootPrefix = "s4~"
+	s4, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	s4.Set(ctx, tm.next(), 999, "dummy")
+	s4.Commit(ctx)
+	// cause merge
+	s4, err = Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+
+	roots, err := s.listRoots(ctx)
+	require.Equal(t, 1, len(roots))
+	active := roots[0]
+	roots, err = s.listMergedRoots(ctx)
+
+	dbgprintf("s:\t\t%s\n", *sRoot)
+	dbgprintf("s2ModifyLeaf:\t\t%s\n", *s2ModifyLeafRoot)
+	dbgprintf("s2ModifyRoot:\t\t%s\n", *s2ModifyRootRoot)
+	dbgprintf("sMerged:\t%s\n", *sMergedRoot)
+
+	nodes, _, err := sMerged.getHistoricRootsAndNodes(ctx, *sMerged.crdt.Created)
+	require.NoError(t, err)
+	dbgprintf("\nsuperseded nodes:\n")
+	for i := range nodes {
+		dbgprintf("  %+v\n", nodes[i])
+	}
+
+	allNodes, err := s.s3Client.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
+		Bucket: &s.persist.(*persistEncryptor).BucketName,
+		Prefix: &s.persist.(*persistEncryptor).Prefix,
+	})
+	nodesThatWouldBePreserved := map[string]interface{}{}
+	for _, o := range allNodes.Contents {
+		nodesThatWouldBePreserved[*o.Key] = nil
+	}
+	for _, node := range getNodesForRoot(ctx, s, active, s.root) {
+		delete(nodesThatWouldBePreserved, node)
+	}
+	currentNodes := map[string]interface{}{}
+	for node := range nodesThatWouldBePreserved {
+		currentNodes[node] = nil
+	}
+	require.EqualValues(t, nodesThatWouldBePreserved, currentNodes)
+
+	/*
+		fmt.Printf("version graph:\n")
+		for k, v := range graph {
+			fmt.Printf("%s:  %+v\n", k, *v)
+		}
+		fmt.Println()*/
+}
+
+func getNodesForRoot(ctx context.Context, s *DB, rootName string, persist mast.Persist) []string {
+	root, _, err := loadRoot(ctx, persist, rootName)
+	if err != nil {
+		panic("load root")
+	}
+	tree, err := crdt.Load(ctx, s.crdt.Config, &rootName, *root)
+	if err != nil {
+		panic("new root")
+	}
+	empty := crdt.NewRoot(time.Time{}, 0)
+	emptyTree, err := crdt.Load(ctx, s.crdt.Config, nil, empty)
+	if err != nil {
+		panic("new root")
+	}
+	res := []string{}
+	err = tree.Mast.DiffLinks(ctx, emptyTree.Mast,
+		func(removed bool, link interface{}) (bool, error) {
+			if !removed {
+				res = append(res, link.(string))
+			}
+			return true, nil
+		})
+	if err != nil {
+		panic(fmt.Errorf("diffLinks: %w", err))
+	}
+	return res
+}
+
+func dumpRootsAndNodes(ctx context.Context, roots []string, s *DB, persist mast.Persist) {
+	for i := range roots {
+		fmt.Printf("  %s nodes:\n", roots[i])
+		nodes := getNodesForRoot(ctx, s, roots[i], persist)
+		for i := range nodes {
+			fmt.Printf("    %+v\n", nodes[i])
+		}
+	}
+}
+
+func dumpBucket(s *DB) {
+	fmt.Printf("bucket contents:\n")
+	list, err := s.s3Client.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
+		Bucket: &s.root.BucketName,
+	})
+	if err != nil {
+		panic(err)
+	}
+	if *list.IsTruncated {
+		panic("too much crap")
+	}
+	for _, o := range list.Contents {
+		fmt.Printf("  %s\n", *o.Key)
+	}
+}
+
+func contentHash(s *DB) string {
+	return bucketContentHashForPrefix(s.s3Client, s.cfg.Storage.BucketName, s.cfg.Storage.Prefix)
+}
+
+func bucketContentHashForPrefix(s S3Interface, bucketName, prefix string) string {
+	list, err := s.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
+		Bucket: &bucketName,
+		Prefix: &prefix,
+	})
+	if err != nil {
+		panic(err)
+	}
+	if *list.IsTruncated {
+		panic("too much crap")
+	}
+	digest := blake2b.New256()
+	for _, o := range list.Contents {
+		digest.Write([]byte(*o.Key))
+		digest.Write([]byte(o.LastModified.String()))
+		digest.Write([]byte(*o.ETag))
+	}
+	return base64.RawURLEncoding.EncodeToString(digest.Sum(nil))
+}
+
+func TestAggregation(t *testing.T) {
+	tm := newTestTime()
+	c, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	primaryConfig := Config{
+		Storage:    &S3BucketInfo{c.Endpoint, bucketName, "primary"},
+		KeysLike:   1234,
+		ValuesLike: "hi",
+	}
+
+	primary, err := Open(ctx, c, primaryConfig, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	err = primary.Set(ctx, tm.next(), 1, "a")
+	require.NoError(t, err)
+	_, err = primary.Commit(ctx)
+	require.NoError(t, err)
+
+	type DerivedData struct {
+		SourceVersion string
+		Count         int
+	}
+	var lastDD DerivedData
+
+	updateSecondary := func() error {
+		secondary, err := Open(ctx, c, Config{
+			Storage:    &S3BucketInfo{c.Endpoint, bucketName, "secondary"},
+			KeysLike:   "hi",
+			ValuesLike: DerivedData{},
+		}, OpenOptions{}, tm.next())
+		if err != nil {
+			return fmt.Errorf("open secondary: %w", err)
+		}
+		dd := DerivedData{}
+		ok, err := secondary.Get(ctx, "latest", &dd)
+		if err != nil {
+			return fmt.Errorf("get state: %w", err)
+		}
+		var lastReadPrimary *DB
+		if ok {
+			lastReadPrimary, err = Open(ctx, c, primaryConfig, OpenOptions{ReadOnly: true, SingleVersion: dd.SourceVersion}, time.Time{})
+			if err != nil {
+				// log that we couldn't read the old version, but that's OK, we can regenerate everything from scratch
+			}
+		}
+		latestPrimary, err := Open(ctx, c, primaryConfig, OpenOptions{ReadOnly: true}, time.Time{})
+		if err != nil {
+			return fmt.Errorf("open latest primary")
+		}
+		source, err := latestPrimary.Commit(ctx)
+		if err != nil {
+			return fmt.Errorf("get single root for latest primary: %w", err)
+		}
+		if source == nil {
+			// no data added yet
+			return nil
+		}
+		updateFunc := func(key, addedValue, removedValue interface{}) (keepGoing bool, err error) {
+			if addedValue != nil && removedValue == nil {
+				dd.Count++
+			} else if addedValue == nil && removedValue != nil {
+				dd.Count--
+			}
+			return true, nil
+		}
+		err = latestPrimary.Diff(ctx, lastReadPrimary, updateFunc)
+		if err != nil {
+			return fmt.Errorf("update derived data: %w", err)
+		}
+		dd.SourceVersion = *source
+		err = secondary.Set(ctx, tm.next(), "latest", &dd)
+		if err != nil {
+			return fmt.Errorf("set: %w", err)
+		}
+		lastDD = dd
+		_, err = secondary.Commit(ctx)
+		if err != nil {
+			return fmt.Errorf("save secondary: %w", err)
+		}
+		return nil
+	}
+
+	err = updateSecondary()
+	if err != nil {
+		panic(err)
+	}
+	require.Equal(t, 1, lastDD.Count)
+}
+
+type countyS3 struct {
+	s3.S3
+	l                    sync.Mutex
+	getAttemptCountByKey map[string]int
+	putAttemptCount      int
+}
+
+func (s *countyS3) GetObjectWithContext(ctx aws.Context, input *s3.GetObjectInput, opts ...request.Option) (*s3.GetObjectOutput, error) {
+	if s.getAttemptCountByKey == nil {
+		s.getAttemptCountByKey = map[string]int{
+			*input.Key: 1,
+		}
+	} else {
+		s.getAttemptCountByKey[*input.Key]++
+	}
+	return s.S3.GetObjectWithContext(ctx, input, opts...)
+}
+
+func (s *countyS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInput, opts ...request.Option) (*s3.PutObjectOutput, error) {
+	s.l.Lock()
+	s.putAttemptCount++
+	defer s.l.Unlock()
+	return s.S3.PutObjectWithContext(ctx, input, opts...)
+}
+
+func TestDefaultNodeCacheOff(t *testing.T) {
+	tm := newTestTime()
+	realC, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg := Config{
+		Storage:      &S3BucketInfo{realC.Endpoint, bucketName, "nodeCacheOff"},
+		KeysLike:     1234,
+		ValuesLike:   "hi",
+		BranchFactor: 4,
+	}
+	c := &countyS3{S3: *realC}
+	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+		err := s.Set(ctx, tm.next(), i, "")
+		require.NoError(t, err)
+	}
+	require.Equal(t, uint64(cfg.BranchFactor+1), s.Size())
+	require.Equal(t, 1, s.Height())
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+
+	s, err = Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	nop := func(_, _, _ interface{}) (bool, error) { return true, nil }
+	err = s.Diff(ctx, nil, nop)
+	require.NoError(t, err)
+	err = s.Diff(ctx, nil, nop)
+	require.NoError(t, err)
+	nodes := 0
+	for key, count := range c.getAttemptCountByKey {
+		if !strings.HasPrefix(key, "nodeCacheOff/node") {
+			continue
+		}
+		nodes++
+		require.Greater(t, count, 1)
+	}
+	require.Equal(t, 2, nodes)
+}
+
+func TestNodeCache(t *testing.T) {
+	tm := newTestTime()
+	realC, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg := Config{
+		Storage:      &S3BucketInfo{realC.Endpoint, bucketName, "nodeCacheOn"},
+		KeysLike:     1234,
+		ValuesLike:   "hi",
+		BranchFactor: 4,
+	}
+	c := &countyS3{S3: *realC}
+	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+		err := s.Set(ctx, tm.next(), i, "")
+		require.NoError(t, err)
+	}
+	require.Equal(t, uint64(cfg.BranchFactor+1), s.Size())
+	require.Equal(t, 1, s.Height())
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+
+	cfg.NodeCache = mast.NewNodeCache(10)
+	s, err = Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	nop := func(_, _, _ interface{}) (bool, error) { return true, nil }
+	err = s.Diff(ctx, nil, nop)
+	require.NoError(t, err)
+	err = s.Diff(ctx, nil, nop)
+	require.NoError(t, err)
+	s, err = Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	err = s.Diff(ctx, nil, nop)
+	require.NoError(t, err)
+	err = s.Diff(ctx, nil, nop)
+	require.NoError(t, err)
+
+	nodes := 0
+	for key, count := range c.getAttemptCountByKey {
+		if !strings.HasPrefix(key, "nodeCacheOn/node") {
+			continue
+		}
+		nodes++
+		require.Equal(t, 1, count)
+	}
+	require.Equal(t, 2, nodes)
+}
+
+func TestRedundantCommitDoesNotWriteToBucket(t *testing.T) {
+	tm := newTestTime()
+	realC, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg := Config{
+		Storage:      &S3BucketInfo{realC.Endpoint, bucketName, "redundantCommit"},
+		KeysLike:     1234,
+		ValuesLike:   "hi",
+		BranchFactor: 4,
+	}
+	c := &countyS3{S3: *realC}
+	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+		err := s.Set(ctx, tm.next(), i, "")
+		require.NoError(t, err)
+	}
+	require.Equal(t, uint64(cfg.BranchFactor+1), s.Size())
+	require.Equal(t, 1, s.Height())
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+	assert.Greater(t, c.putAttemptCount, 0)
+
+	startCount := c.putAttemptCount
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, startCount, c.putAttemptCount, "redundant commit should not write anything")
+}
+
+func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
+	tm := newTestTime()
+	c, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg := Config{
+		Storage:      &S3BucketInfo{c.Endpoint, bucketName, "setSameValueWithLaterModTime"},
+		KeysLike:     1234,
+		ValuesLike:   "hi",
+		BranchFactor: 4,
+	}
+	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	origTime := tm.next()
+	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+		err := s.Set(ctx, origTime, i, "")
+		require.NoError(t, err)
+	}
+	require.Equal(t, uint64(cfg.BranchFactor+1), s.Size())
+	require.Equal(t, 1, s.Height())
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+
+	origHash := contentHash(s)
+
+	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+		err := s.Set(ctx, origTime, i, "new value with same modtime should be no-op")
+		require.NoError(t, err)
+	}
+	assert.False(t, s.IsDirty())
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+	newHash := contentHash(s)
+	assert.Equal(t, origHash, newHash, "re-set existing values with same modification time shouldn't change the bucket")
+
+	newTime := tm.next()
+	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+		err := s.Set(ctx, newTime, i, "")
+		require.NoError(t, err)
+	}
+	assert.True(t, s.IsDirty())
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+	newHash = contentHash(s)
+	assert.NotEqual(t, origHash, newHash, "set entry with later modification time should result in new content even with unchanged value")
+}
+
+type dbgS3 struct {
+	S3Interface
+}
+
+func (s *dbgS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInput, opts ...request.Option) (*s3.PutObjectOutput, error) {
+	fmt.Printf("PUT %s...\n", *input.Key)
+	return s.S3Interface.PutObjectWithContext(ctx, input, opts...)
+}
+
+func TestUpdateVsDeleteConflict(t *testing.T) {
+	updateThenDelete := "updateThenDelete"
+	deleteThenUpdate := "deleteThenUpdate"
+	updateOnly := "updateOnly"
+	origValue := 123
+	s, c, cfg, tm, closer := createTestTree("updateVsDelete", updateThenDelete, origValue,
+		deleteThenUpdate, origValue,
+		updateOnly, origValue)
+	defer closer()
+	_, err := s.Commit(ctx)
+	require.NoError(t, err)
+	origHash := contentHash(s)
+	left, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	right, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	require.Equal(t, origHash, contentHash(s), "open single root should not result in a merge")
+	require.NoError(t, left.Set(ctx, tm.next(), updateThenDelete, origValue+1))
+	require.NoError(t, right.Tombstone(ctx, tm.next(), updateThenDelete))
+	require.NoError(t, left.Tombstone(ctx, tm.next(), deleteThenUpdate))
+	require.NoError(t, right.Set(ctx, tm.next(), deleteThenUpdate, origValue+1))
+	require.NoError(t, left.Set(ctx, tm.next(), updateOnly, origValue+1))
+	require.NoError(t, right.Set(ctx, tm.next(), updateOnly, origValue+2))
+	_, err = left.Commit(ctx)
+	require.NoError(t, err)
+	_, err = right.Commit(ctx)
+	require.NoError(t, err)
+	merged, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	var retrieved int
+	ok, err := merged.Get(ctx, updateThenDelete, &retrieved)
+	require.NoError(t, err)
+	require.False(t, ok, "tombstone always wins")
+	ok, err = merged.Get(ctx, deleteThenUpdate, &retrieved)
+	require.NoError(t, err)
+	require.False(t, ok, "tombstone always wins")
+	ok, err = merged.Get(ctx, updateOnly, &retrieved)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, origValue+2, retrieved, "later value wins")
+}
+
+func createTestTree(name string, key, value interface{}, keyVals ...interface{}) (*DB, S3Interface, Config, TestTime, func()) {
+	tm := newTestTime()
+	c, bucketName, closer := s3test.Client()
+	// dbgC:=&dbgS3{c}
+	cfg := Config{
+		Storage:      &S3BucketInfo{c.Endpoint, bucketName, name},
+		KeysLike:     key,
+		ValuesLike:   value,
+		BranchFactor: 4,
+	}
+	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	if err != nil {
+		panic(err)
+	}
+	if err := s.Set(ctx, tm.next(), key, value); err != nil {
+		panic(err)
+	}
+	if len(keyVals)%2 == 1 {
+		panic("keyVals missing value")
+	}
+	for i := range keyVals {
+		if i%2 == 0 {
+			key = keyVals[i]
+		} else {
+			value = keyVals[i]
+			if err := s.Set(ctx, tm.next(), key, value); err != nil {
+				panic(err)
+			}
+		}
+	}
+	return s, c, cfg, tm, closer
+}
+
+func TestStructKeysAndValues(t *testing.T) {
+	type key struct {
+		A int
+		B string
+	}
+	type value struct {
+		C int
+		D string
+	}
+	updateThenDelete := key{1, "updateThenDelete"}
+	deleteThenUpdate := key{1, "deleteThenUpdate"}
+	updateOnly := key{1, "updateOnly"}
+	deleteBeforeInsert := key{1, "deleteBeforeInsert"}
+	origValue := value{123, "hello"}
+	add := func(v value, n int) value { return value{v.C + n, v.D} }
+	s, c, cfg, tm, closer := createTestTree("structKeysAndValues", updateThenDelete, origValue,
+		deleteThenUpdate, origValue,
+		updateOnly, origValue,
+		deleteBeforeInsert, origValue)
+	defer closer()
+	_, err := s.Commit(ctx)
+	require.NoError(t, err)
+	origHash := contentHash(s)
+	left, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	right, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	require.Equal(t, origHash, contentHash(s), "open single root should not result in a merge")
+	require.NoError(t, left.Set(ctx, tm.next(), updateThenDelete, add(origValue, 1)))
+	require.NoError(t, right.Tombstone(ctx, tm.next(), updateThenDelete))
+	require.NoError(t, left.Tombstone(ctx, tm.next(), deleteThenUpdate))
+	require.NoError(t, right.Set(ctx, tm.next(), deleteThenUpdate, add(origValue, 1)))
+	require.NoError(t, left.Set(ctx, tm.next(), updateOnly, add(origValue, 1)))
+	require.NoError(t, right.Set(ctx, tm.next(), updateOnly, add(origValue, 2)))
+	require.NoError(t, left.Tombstone(ctx, tm.next(), deleteBeforeInsert))
+	require.NoError(t, right.Set(ctx, tm.next(), deleteBeforeInsert, add(origValue, 1)))
+	_, err = left.Commit(ctx)
+	require.NoError(t, err)
+	_, err = right.Commit(ctx)
+	require.NoError(t, err)
+	merged, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	var retrieved value
+	ok, err := merged.Get(ctx, updateThenDelete, &retrieved)
+	require.NoError(t, err)
+	require.False(t, ok, "tombstone always wins")
+	ok, err = merged.Get(ctx, deleteThenUpdate, &retrieved)
+	require.NoError(t, err)
+	require.False(t, ok, "tombstone always wins")
+	ok, err = merged.Get(ctx, updateOnly, &retrieved)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, add(origValue, 2), retrieved, "later value wins")
+	ok, err = merged.Get(ctx, deleteBeforeInsert, &retrieved)
+	require.NoError(t, err)
+	require.False(t, ok, "tombstone always wins")
+}
+
+func TestTombstoneRemoval(t *testing.T) {
+	s, c, cfg, tm, closer := createTestTree("TombstoneRemoval",
+		0, "tombstone",
+		1, "tombstoneLater",
+		2, "preserve",
+		3, "preserve",
+		4, "preserve",
+	)
+	defer closer()
+	reopen(s, c, cfg, tm.next())
+	require.Equal(t, uint64(5), s.Size())
+	reopen(s, c, cfg, tm.next())
+	require.NoError(t, s.Tombstone(ctx, tm.next(), 0))
+	cutoff := tm.next()
+	reopen(s, c, cfg, tm.next())
+	require.NoError(t, s.Tombstone(ctx, tm.next(), 1))
+	reopen(s, c, cfg, tm.next())
+	require.Equal(t, uint64(5), s.Size())
+	reopen(s, c, cfg, tm.next())
+	require.NoError(t, s.RemoveTombstones(ctx, cutoff))
+	reopen(s, c, cfg, tm.next())
+	require.Equal(t, uint64(4), s.Size())
+	require.NoError(t, s.RemoveTombstones(ctx, tm.next()))
+	reopen(s, c, cfg, tm.next())
+	require.Equal(t, uint64(3), s.Size())
+
+	count := 0
+	require.NoError(t, s.Diff(ctx, nil, func(key, myValue, fromValue interface{}) (keepGoing bool, err error) {
+		require.Equal(t, myValue, "preserve")
+		count++
+		return true, nil
+	}))
+	require.Equal(t, 3, count)
+}
+
+func reopen(s *DB, c S3Interface, cfg Config, tm time.Time) {
+	_, err := s.Commit(ctx)
+	if err != nil {
+		panic(err)
+	}
+	ns, err := Open(ctx, c, cfg, OpenOptions{}, tm)
+	if err != nil {
+		panic(err)
+	}
+	*s = *ns
+}
+
+func TestDeleteHistory(t *testing.T) {
+	s, c, cfg, tm, closer := createTestTree("DeleteHistory",
+		1, "preserve",
+		4, "preserve",
+		5, "delete",
+		6, "delete",
+		7, "delete",
+		8, "delete",
+	)
+	defer closer()
+	require.Equal(t, uint64(6), s.Size())
+	reopen(s, c, cfg, tm.next())
+	require.NoError(t, s.Tombstone(ctx, tm.next(), 5))
+	require.NoError(t, s.Tombstone(ctx, tm.next(), 6))
+	require.NoError(t, s.Tombstone(ctx, tm.next(), 7))
+	require.NoError(t, s.Tombstone(ctx, tm.next(), 8))
+	require.Equal(t, uint64(6), s.Size())
+	require.NoError(t, s.RemoveTombstones(ctx, tm.next()))
+	require.Equal(t, uint64(2), s.Size())
+	reopen(s, c, cfg, tm.next())
+
+	require.NoError(t, s.DeleteHistoryBefore(ctx, tm.next()))
+	origHash := contentHash(s)
+
+	require.Equal(t, uint64(2), s.Size())
+	o, err := s.listRoots(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(o))
+	o, err = s.listMergedRoots(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(o))
+	o, err = s.listNodes(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(o))
+
+	// test DeleteHistoryBefore idempotency
+	require.NoError(t, s.DeleteHistoryBefore(ctx, tm.next()))
+	newHash := contentHash(s)
+	assert.Equal(t, origHash, newHash)
+
+	count := 0
+	require.NoError(t, s.Diff(ctx, nil, func(key, myValue, fromValue interface{}) (keepGoing bool, err error) {
+		require.Equal(t, myValue, "preserve")
+		count++
+		return true, nil
+	}))
+	require.Equal(t, 2, count)
+
+	// now delete everything
+	require.NoError(t, s.Tombstone(ctx, tm.next(), 1))
+	require.NoError(t, s.Tombstone(ctx, tm.next(), 4))
+	reopen(s, c, cfg, tm.next())
+	require.Equal(t, uint64(2), s.Size())
+	require.NoError(t, s.RemoveTombstones(ctx, tm.next()))
+	require.Equal(t, uint64(0), s.Size())
+	require.True(t, s.tombstoned)
+	reopen(s, c, cfg, tm.next())
+	require.False(t, s.tombstoned)
+	require.Equal(t, uint64(0), s.Size())
+	require.False(t, s.IsDirty())
+	require.NoError(t, s.DeleteHistoryBefore(ctx, tm.next()))
+	require.False(t, s.IsDirty())
+
+	o, err = s.listRoots(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(o), "all the current roots should have been removed")
+	o, err = s.listMergedRoots(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(o), "there really shouldn't be any merged roots left")
+	o, err = s.listNodes(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(o), "no nodes left")
+}
+
+func TestDecryptionWithWrongKey(t *testing.T) {
+	tm := newTestTime()
+	c, bucketName, closer := s3test.Client()
+	cfg := Config{
+		Storage:       &S3BucketInfo{c.Endpoint, bucketName, "badkey"},
+		KeysLike:      "stringy",
+		ValuesLike:    "stringy",
+		BranchFactor:  4,
+		NodeEncryptor: V1NodeEncryptor(nil),
+	}
+	defer closer()
+	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	require.NoError(t, s.Set(ctx, tm.next(), "foo", "bar"))
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+
+	newKey := []byte{1}
+	cfg.NodeEncryptor = V1NodeEncryptor(newKey)
+	s, err = Open(ctx, c, cfg, OpenOptions{ReadOnly: true}, tm.next())
+	require.True(t, errors.Is(err, ErrMACVerificationFailure))
+}
+
+func TestTraceHistory(t *testing.T) {
+	s, c, cfg, tm, closer := createTestTree("traceHistory", "foo", 1)
+	defer closer()
+	reopen(s, c, cfg, tm.next())
+	require.NoError(t, s.Set(ctx, tm.next(), "foo", 2))
+	reopen(s, c, cfg, tm.next())
+	require.NoError(t, s.Set(ctx, tm.next(), "foo", 3))
+	reopen(s, c, cfg, tm.next())
+	history := []int{}
+	require.NoError(t, s.TraceHistory(ctx, "foo", time.Time{}, func(when time.Time, value interface{}) (keepGoing bool, err error) {
+		history = append(history, value.(int))
+		return true, nil
+	}))
+	require.Equal(t, []int{3, 2, 1}, history)
+}
