@@ -5,7 +5,7 @@ s3db turns your S3 bucket into a database. You can also learn what changed
 since the last time you looked.  Now your database is also your event stream!
 🤯 
 
-# Details
+# Overview
 s3db is an opinionated modern serverless datastore built on diffing
 that integrates streaming, reduces dependencies and makes it natural
 to write distributed systems with fewer idempotency bugs.
@@ -25,10 +25,10 @@ and shared-nothing architectures.
 - S3-compatible storage, like minio, Wasabi, or AWS
 
 # Getting started
-Check out the [Getting Started Guide](GETTINGSTARTED.md).
+[Getting Started Guide](GETTINGSTARTED.md).
 
-# Unrelated
-* [Simple Sloppy Semantic Database](https://en.wikipedia.org/wiki/Simple_Sloppy_Semantic_Database) at s3db.org predates Amazon S3
+# Disambiguation
+* This s3db is NOT related to [Simple Sloppy Semantic Database](https://en.wikipedia.org/wiki/Simple_Sloppy_Semantic_Database) at s3db.org that predates Amazon S3.
 
 # Links
 * Go package documentation [godoc.org/github.com/jrhy/s3db](https://godoc.org/github.com/jrhy/s3db)
