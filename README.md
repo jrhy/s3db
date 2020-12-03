@@ -25,7 +25,7 @@ and shared-nothing architectures.
 - S3-compatible storage, like minio, Wasabi, or AWS
 
 # Getting started
-[Getting Started Guide](GETTINGSTARTED.md).
+[Guide](GETTINGSTARTED.md)
 
 # Disambiguation
 * This s3db is NOT related to [Simple Sloppy Semantic Database](https://en.wikipedia.org/wiki/Simple_Sloppy_Semantic_Database) at s3db.org that predates Amazon S3.
