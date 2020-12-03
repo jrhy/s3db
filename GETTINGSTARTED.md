@@ -6,23 +6,10 @@ Grab your bucket. We'll go kick the tires with the s3db CLI.
 # Get a bucket
 Skip if you already have the AWS SDK configured, or want to use some other 
 S3-compatible storage. If you just want to kick the
-tires, you can install `minio` locally by:
-
-```
-go get github.com/minio/minio
-go install github.com/minio/minio
-```
-or follow the excellent minio [Quickstart Guide](https://docs.min.io/docs/minio-quickstart-guide.html).
+tires, you can install `minio` locally following the excellent minio [Quickstart Guide](https://docs.min.io/docs/minio-quickstart-guide.html).
 
 # Get the `mc` command
-Minio's `mc` is also amazing. It can be installed by:
-
-```
-go get github.com/minio/minio
-go install github.com/minio/minio
-```
-
-or follow their [Minio Client Guide](https://docs.min.io/docs/minio-client-complete-guide.html).
+Minio's `mc` is also amazing. It can be installed following the [Minio Client Guide](https://docs.min.io/docs/minio-client-complete-guide.html).
 
 # Install the `s3db` CLI
 ```
