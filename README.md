@@ -32,4 +32,5 @@ and shared-nothing architectures.
 
 # Links
 * Go package documentation [godoc.org/github.com/jrhy/s3db](https://godoc.org/github.com/jrhy/s3db)
+* Data structure [github.com/jrhy/mast](https://github.com/jrhy/mast)
 
