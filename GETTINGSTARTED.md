@@ -62,29 +62,37 @@ s3db -b $B -p db1 show
 ```
 
 # Use `s3db` to track changes
+```
 v1=`s3db -b $B -p db1 merge`
 s3db -b $B -p db1 set foo=bar999
 s3db -b $B -p db1 diff $v1
+```
 
 # Use encryption
+```
 dd if=/dev/random of=master.key bs=32 count=1
 s3db -b $B -p db2 -k master.key set foo=bar
 s3db -b $B -p db2 -k master.key show
+```
 
 # Track changes of a specific value
+```
 s3db -b $B -p db2 -k master.key set foo=bar2
 s3db -b $B -p db2 -k master.key set foo=bar3
 s3db -b $B -p db2 -k master.key set foo=bar4
 s3db -b $B -p db2 -k master.key trace-history foo
+```
 
 # Mark data as no longer relevant
+```
 s3db -b $B -p db2 -k master.key tombstone foo
 s3db -b $B -p db2 -k master.key show
+```
 
 # Delete space from versions you don't care about
-s3db -b $B -p db2 -k master.key set foo2=bar2
-s3db -b $B -p db2 -k master.key show 
-s3db -b $B -p db2 -k master.key delete-history --older-than=1m
-s3db -b $B -p db2 -k master.key show
+```
+mc ls -r  hello/$B/db2
+s3db -b $B -p db2 -k master.key delete-history --older-than=1s
+mc ls -r  hello/$B/db2
 ```
 
