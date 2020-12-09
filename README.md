@@ -1,4 +1,5 @@
 # s3db: Serverless database and diffing for S3
+![Go](https://github.com/jrhy/s3db/workflows/Go/badge.svg)
 [![GoDoc](https://godoc.org/github.com/jrhy/s3db?status.svg)](https://godoc.org/github.com/jrhy/s3db)
 
 s3db turns your S3 bucket into a database. You can also learn what changed
