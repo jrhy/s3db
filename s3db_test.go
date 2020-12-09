@@ -873,21 +873,21 @@ func TestTombstoneRemoval(t *testing.T) {
 		4, "preserve",
 	)
 	defer closer()
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.Equal(t, uint64(5), s.Size())
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.NoError(t, s.Tombstone(ctx, tm.next(), 0))
 	cutoff := tm.next()
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.NoError(t, s.Tombstone(ctx, tm.next(), 1))
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.Equal(t, uint64(5), s.Size())
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.NoError(t, s.RemoveTombstones(ctx, cutoff))
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.Equal(t, uint64(4), s.Size())
 	require.NoError(t, s.RemoveTombstones(ctx, tm.next()))
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.Equal(t, uint64(3), s.Size())
 
 	count := 0
@@ -899,8 +899,8 @@ func TestTombstoneRemoval(t *testing.T) {
 	require.Equal(t, 3, count)
 }
 
-func reopen(s *DB, c S3Interface, cfg Config, tm time.Time) {
-	_, err := s.Commit(ctx)
+func reopen(s **DB, c S3Interface, cfg Config, tm time.Time) {
+	_, err := (*s).Commit(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -908,7 +908,7 @@ func reopen(s *DB, c S3Interface, cfg Config, tm time.Time) {
 	if err != nil {
 		panic(err)
 	}
-	*s = *ns
+	*s = ns
 }
 
 func TestDeleteHistory(t *testing.T) {
@@ -922,7 +922,7 @@ func TestDeleteHistory(t *testing.T) {
 	)
 	defer closer()
 	require.Equal(t, uint64(6), s.Size())
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.NoError(t, s.Tombstone(ctx, tm.next(), 5))
 	require.NoError(t, s.Tombstone(ctx, tm.next(), 6))
 	require.NoError(t, s.Tombstone(ctx, tm.next(), 7))
@@ -930,7 +930,7 @@ func TestDeleteHistory(t *testing.T) {
 	require.Equal(t, uint64(6), s.Size())
 	require.NoError(t, s.RemoveTombstones(ctx, tm.next()))
 	require.Equal(t, uint64(2), s.Size())
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 
 	require.NoError(t, s.DeleteHistoryBefore(ctx, tm.next()))
 	origHash := contentHash(s)
@@ -962,12 +962,12 @@ func TestDeleteHistory(t *testing.T) {
 	// now delete everything
 	require.NoError(t, s.Tombstone(ctx, tm.next(), 1))
 	require.NoError(t, s.Tombstone(ctx, tm.next(), 4))
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.Equal(t, uint64(2), s.Size())
 	require.NoError(t, s.RemoveTombstones(ctx, tm.next()))
 	require.Equal(t, uint64(0), s.Size())
 	require.True(t, s.tombstoned)
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.False(t, s.tombstoned)
 	require.Equal(t, uint64(0), s.Size())
 	require.False(t, s.IsDirty())
@@ -1011,11 +1011,11 @@ func TestDecryptionWithWrongKey(t *testing.T) {
 func TestTraceHistory(t *testing.T) {
 	s, c, cfg, tm, closer := createTestTree("traceHistory", "foo", 1)
 	defer closer()
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.NoError(t, s.Set(ctx, tm.next(), "foo", 2))
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	require.NoError(t, s.Set(ctx, tm.next(), "foo", 3))
-	reopen(s, c, cfg, tm.next())
+	reopen(&s, c, cfg, tm.next())
 	history := []int{}
 	require.NoError(t, s.TraceHistory(ctx, "foo", time.Time{}, func(when time.Time, value interface{}) (keepGoing bool, err error) {
 		history = append(history, value.(int))
