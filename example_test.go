@@ -44,7 +44,8 @@ func setupS3(bucketName string) (*aws.Config, func()) {
 
 	return s3cfg, closer
 }
-func ExampleS3DBOpen() {
+
+func ExampleOpen() {
 	ctx := context.Background()
 	s3cfg, close := setupS3("bucket")
 	defer close()
