@@ -47,18 +47,25 @@ type DB struct {
 	tombstoned       bool
 }
 
-// Config defines how values are stored and marshaled/unmarshaled.
+// Config defines how values are stored and (un)marshaled.
 type Config struct {
+	// S3 endpoint, bucket name, and database prefix
 	Storage          *S3BucketInfo
+	// An optional label that will be added to committed versions' names for easier listing (e.g. "daily-report-")
 	CustomRootPrefix string
+	// An example of a key, to know what concrete type to make when unmarshaling
 	KeysLike         interface{}
+	// An example of a value, to know what concrete type to make when unmarshaling
 	ValuesLike       interface{}
-	// sets the entries-per-S3 object for new trees
+	// Sets the entries-per-S3 object for new trees (ignored unless tree is empty)
 	BranchFactor  uint
+	// An optional S3-endpoint-scoped cache, instead of re-downloading recently-used tree nodes
 	NodeCache     mast.NodeCache
+	// A way to keep your cloud provider out of your nodes
 	NodeEncryptor Encryptor
 }
 
+// Encryptor encrypts bytes with a nonce derived from the given path.
 type Encryptor interface {
 	Encrypt(path string, value []byte) ([]byte, error)
 	Decrypt(path string, value []byte) ([]byte, error)
@@ -82,11 +89,15 @@ type OpenOptions struct {
 	SingleVersion string
 }
 
-// S3Interface access an AWS S3-compatible bucket
+// S3Interface is the subset of the AWS SDK for S3 that s3db uses to access compatible buckets
 type S3Interface interface {
+	// à la AWS SDK for S3
 	DeleteObjectWithContext(ctx aws.Context, input *s3.DeleteObjectInput, opts ...request.Option) (*s3.DeleteObjectOutput, error)
+	// à la AWS SDK for S3
 	GetObjectWithContext(ctx aws.Context, input *s3.GetObjectInput, opts ...request.Option) (*s3.GetObjectOutput, error)
+	// à la AWS SDK for S3
 	ListObjectsV2WithContext(ctx aws.Context, input *s3.ListObjectsV2Input, opts ...request.Option) (*s3.ListObjectsV2Output, error)
+	// à la AWS SDK for S3
 	PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInput, opts ...request.Option) (*s3.PutObjectOutput, error)
 }
 
@@ -598,10 +609,16 @@ func (s *DB) Get(ctx context.Context, key interface{}, value interface{}) (bool,
 	return s.crdt.Get(ctx, key, value)
 }
 
+// IsTombstoned returns true if Tombstone() was invoked and committed
+// since the last RemoveTombstones().
 func (s *DB) IsTombstoned(ctx context.Context, key interface{}) (bool, error) {
 	return s.crdt.IsTombstoned(ctx, key)
 }
 
+// Tombstone sets a persistent record indicating an entry will no longer be accessible, until
+// RemoveTombstones() is done. If multiple versions have different values or tombstones for a key,
+// they'll eventually get merged into the earliest tombstone. You can set a tombstone even if the
+// entry was never set to a value, just to ensure that any future sets are ineffective.
 func (s *DB) Tombstone(ctx context.Context, when time.Time, key interface{}) error {
 	if s.readonly {
 		return ErrReadOnly
@@ -609,7 +626,7 @@ func (s *DB) Tombstone(ctx context.Context, when time.Time, key interface{}) err
 	return s.crdt.Tombstone(ctx, when, key)
 }
 
-// Height is the number of nodes between a leaf and the root.
+// Height is the number of nodes between a leaf and the root—the number of nodes that need to be retrieved to do a Get() in the worst case.
 func (s DB) Height() int {
 	return int(s.crdt.Mast.Height())
 }
@@ -654,6 +671,11 @@ func innerValue(v interface{}) interface{} {
 	return nil
 }
 
+// RemoveTombstones gets rid of the old tombstones, in the current version. The
+// time should be chosen such that there are not going to be any merges for
+// affected entries, otherwise merged sets will start new rounds of values for
+// the affected entries. For example, if it would be valid for clients to retry
+// hour-old requests, 'before' should be at least an hour ago.
 func (s *DB) RemoveTombstones(ctx context.Context, before time.Time) error {
 	sc, err := s.Clone(ctx)
 	if err != nil {
@@ -678,7 +700,12 @@ func (s *DB) RemoveTombstones(ctx context.Context, before time.Time) error {
 	return nil
 }
 
-func (s *DB) DeleteHistoryBefore(ctx context.Context, before time.Time) error {
+// DeleteeHistoricalVersionsAndData deletes storage associated with old
+// versions, and any nodes from those versions that are no longer necessary for
+// reading later versions. Deletion reduces the number of objects in the bucket
+// but means that attempts to Diff(), TraceHistory(), or merge versions before
+// the cutoff will fail.
+func DeleteHistoricVersions(ctx context.Context, s *DB, before time.Time) error {
 	if s.readonly {
 		return ErrReadOnly
 	}
@@ -727,6 +754,8 @@ type dbAndCutoff struct {
 	cutoff int64
 }
 
+// TraceHistory invokes the given callback for each historic value of 'key', up
+// to the last RemoveTombstones().
 func (s *DB) TraceHistory(
 	ctx context.Context,
 	key interface{},

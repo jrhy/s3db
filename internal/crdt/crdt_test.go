@@ -108,6 +108,7 @@ func TestStructValues(t *testing.T) {
 	}
 
 	c1, err := Load(ctx, cfg, nil, emptyRoot)
+	require.NoError(t, err)
 	err = c1.Set(ctx, time.Now(), 0, foo{asdf{1, 3.14}, true})
 	require.NoError(t, err)
 	c1Root, err := c1.MakeRoot(ctx)
@@ -139,25 +140,30 @@ func TestFile(t *testing.T) {
 	}
 
 	s1, err := Load(ctx, cfg, nil, empty)
+	require.NoError(t, err)
 	err = s1.Set(ctx, time.Now(), "user1", MyObject{A: "a"})
 	require.NoError(t, err)
 	_, err = s1.MakeRoot(ctx)
 	require.NoError(t, err)
 	var v MyObject
 	found, err := s1.Get(ctx, "user1", &v)
+	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, MyObject{"a"}, v)
 
 	s2, err := Load(ctx, cfg, nil, empty)
+	require.NoError(t, err)
 	err = s2.Set(ctx, time.Now(), "user1", MyObject{A: "b"})
 	require.NoError(t, err)
 	_, err = s2.MakeRoot(ctx)
 	require.NoError(t, err)
 
 	err = s1.Merge(ctx, s2)
+	require.NoError(t, err)
 	assert.Equal(t, uint64(1), s1.Size())
 	assert.Equal(t, uint64(1), s2.Size())
 	found, err = s1.Get(ctx, "user1", &v)
+	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, MyObject{"b"}, v)
 }
@@ -179,30 +185,31 @@ func TestImmediateDeletion(t *testing.T) {
 		StoreImmutablePartsWith: persist,
 	}
 
-	var cleanup []*Root
-
 	s1, err := Load(ctx, cfg, nil, empty)
+	require.NoError(t, err)
 	err = s1.Set(ctx, time.Now(), "user1", MyObject{A: "a"})
 	require.NoError(t, err)
-	newRoot, err := s1.MakeRoot(ctx)
+	_, err = s1.MakeRoot(ctx)
 	require.NoError(t, err)
-	cleanup = append(cleanup, newRoot)
 	var v MyObject
 	found, err := s1.Get(ctx, "user1", &v)
+	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, MyObject{"a"}, v)
 
 	s2, err := Load(ctx, cfg, nil, empty)
+	require.NoError(t, err)
 	err = s2.Set(ctx, time.Now(), "user1", MyObject{A: "b"})
 	require.NoError(t, err)
 	s2Root, err := s2.MakeRoot(ctx)
 	require.NoError(t, err)
-	cleanup = append(cleanup, s2Root)
 
 	err = s1.Merge(ctx, s2)
+	require.NoError(t, err)
 	assert.Equal(t, uint64(1), s1.Size())
 	assert.Equal(t, uint64(1), s2.Size())
 	found, err = s1.Get(ctx, "user1", &v)
+	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, MyObject{"b"}, v)
 

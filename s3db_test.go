@@ -279,6 +279,7 @@ func TestVersionGraph(t *testing.T) {
 	}
 	cfg.CustomRootPrefix = "s~"
 	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
 	branchFactor := int(s.crdt.Mast.BranchFactor())
 	require.Equal(t, branchFactor, int(cfg.BranchFactor))
 	for i := 0; i < branchFactor+1; i++ {
@@ -314,6 +315,7 @@ func TestVersionGraph(t *testing.T) {
 	require.NoError(t, err)
 	var actual string
 	_, err = sMerged.Get(ctx, 1, &actual)
+	require.NoError(t, err)
 	require.Equal(t, "goo", actual)
 	_, err = sMerged.Get(ctx, branchFactor, &actual)
 	require.Equal(t, "goo", actual)
@@ -325,13 +327,15 @@ func TestVersionGraph(t *testing.T) {
 	s4.Set(ctx, tm.next(), 999, "dummy")
 	s4.Commit(ctx)
 	// cause merge
-	s4, err = Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	_, err = Open(ctx, c, cfg, OpenOptions{}, tm.next())
 	require.NoError(t, err)
 
 	roots, err := s.listRoots(ctx)
+	require.NoError(t, err)
 	require.Equal(t, 1, len(roots))
 	active := roots[0]
-	roots, err = s.listMergedRoots(ctx)
+	_, err = s.listMergedRoots(ctx)
+	require.NoError(t, err)
 
 	dbgprintf("s:\t\t%s\n", *sRoot)
 	dbgprintf("s2ModifyLeaf:\t\t%s\n", *s2ModifyLeafRoot)
@@ -349,6 +353,7 @@ func TestVersionGraph(t *testing.T) {
 		Bucket: &s.persist.(*persistEncryptor).BucketName,
 		Prefix: &s.persist.(*persistEncryptor).Prefix,
 	})
+	require.NoError(t, err)
 	nodesThatWouldBePreserved := map[string]interface{}{}
 	for _, o := range allNodes.Contents {
 		nodesThatWouldBePreserved[*o.Key] = nil
@@ -724,14 +729,14 @@ func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
 	assert.NotEqual(t, origHash, newHash, "set entry with later modification time should result in new content even with unchanged value")
 }
 
-type dbgS3 struct {
-	S3Interface
-}
+// type dbgS3 struct {
+// S3Interface
+// }
 
-func (s *dbgS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInput, opts ...request.Option) (*s3.PutObjectOutput, error) {
-	fmt.Printf("PUT %s...\n", *input.Key)
-	return s.S3Interface.PutObjectWithContext(ctx, input, opts...)
-}
+// func (s *dbgS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInput, opts ...request.Option) (*s3.PutObjectOutput, error) {
+// fmt.Printf("PUT %s...\n", *input.Key)
+// return s.S3Interface.PutObjectWithContext(ctx, input, opts...)
+// }
 
 func TestUpdateVsDeleteConflict(t *testing.T) {
 	updateThenDelete := "updateThenDelete"
@@ -761,6 +766,7 @@ func TestUpdateVsDeleteConflict(t *testing.T) {
 	_, err = right.Commit(ctx)
 	require.NoError(t, err)
 	merged, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
 	var retrieved int
 	ok, err := merged.Get(ctx, updateThenDelete, &retrieved)
 	require.NoError(t, err)
@@ -848,6 +854,7 @@ func TestStructKeysAndValues(t *testing.T) {
 	_, err = right.Commit(ctx)
 	require.NoError(t, err)
 	merged, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
 	var retrieved value
 	ok, err := merged.Get(ctx, updateThenDelete, &retrieved)
 	require.NoError(t, err)
@@ -932,7 +939,7 @@ func TestDeleteHistory(t *testing.T) {
 	require.Equal(t, uint64(2), s.Size())
 	reopen(&s, c, cfg, tm.next())
 
-	require.NoError(t, s.DeleteHistoryBefore(ctx, tm.next()))
+	require.NoError(t, DeleteHistoricVersions(ctx, s, tm.next()))
 	origHash := contentHash(s)
 
 	require.Equal(t, uint64(2), s.Size())
@@ -947,7 +954,7 @@ func TestDeleteHistory(t *testing.T) {
 	require.Equal(t, 1, len(o))
 
 	// test DeleteHistoryBefore idempotency
-	require.NoError(t, s.DeleteHistoryBefore(ctx, tm.next()))
+	require.NoError(t, DeleteHistoricVersions(ctx, s, tm.next()))
 	newHash := contentHash(s)
 	assert.Equal(t, origHash, newHash)
 
@@ -971,7 +978,7 @@ func TestDeleteHistory(t *testing.T) {
 	require.False(t, s.tombstoned)
 	require.Equal(t, uint64(0), s.Size())
 	require.False(t, s.IsDirty())
-	require.NoError(t, s.DeleteHistoryBefore(ctx, tm.next()))
+	require.NoError(t, DeleteHistoricVersions(ctx, s, tm.next()))
 	require.False(t, s.IsDirty())
 
 	o, err = s.listRoots(ctx)
@@ -1004,7 +1011,7 @@ func TestDecryptionWithWrongKey(t *testing.T) {
 
 	newKey := []byte{1}
 	cfg.NodeEncryptor = V1NodeEncryptor(newKey)
-	s, err = Open(ctx, c, cfg, OpenOptions{ReadOnly: true}, tm.next())
+	_, err = Open(ctx, c, cfg, OpenOptions{ReadOnly: true}, tm.next())
 	require.True(t, errors.Is(err, ErrMACVerificationFailure))
 }
 
