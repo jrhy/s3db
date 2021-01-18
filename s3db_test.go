@@ -729,6 +729,72 @@ func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
 	assert.NotEqual(t, origHash, newHash, "set entry with later modification time should result in new content even with unchanged value")
 }
 
+func TestTombstoneVersusModTime(t *testing.T) {
+	tm := newTestTime()
+	c, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg := Config{
+		Storage:      &S3BucketInfo{c.Endpoint, bucketName, "setSameValueWithLaterModTime"},
+		KeysLike:     1234,
+		ValuesLike:   "hi",
+		BranchFactor: 4,
+	}
+	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	earlyTime := tm.next()
+	origTime := tm.next()
+	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+		err := s.Tombstone(ctx, origTime, i)
+		require.NoError(t, err)
+	}
+	require.Equal(t, uint64(cfg.BranchFactor+1), s.Size())
+	require.Equal(t, 1, s.Height())
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+
+	origHash := contentHash(s)
+
+	reopen(&s, c, cfg, tm.next())
+	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+		err := s.Tombstone(ctx, origTime, i)
+		require.NoError(t, err)
+		err = s.RemoveTombstones(ctx, earlyTime)
+		require.NoError(t, err)
+	}
+	assert.False(t, s.IsDirty())
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+	newHash := contentHash(s)
+	assert.Equal(t, origHash, newHash, "re-tombstone values with same modification time shouldn't change the bucket")
+
+	reopen(&s, c, cfg, tm.next())
+	newTime := tm.next()
+	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+		err := s.Tombstone(ctx, newTime, i)
+		require.NoError(t, err)
+		err = s.RemoveTombstones(ctx, earlyTime)
+		require.NoError(t, err)
+	}
+	assert.False(t, s.IsDirty())
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+	newHash = contentHash(s)
+	assert.Equal(t, origHash, newHash, "tombstone with later modification time should not result in new content")
+
+	reopen(&s, c, cfg, tm.next())
+	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+		err := s.Tombstone(ctx, earlyTime, i)
+		require.NoError(t, err)
+		err = s.RemoveTombstones(ctx, earlyTime)
+		require.NoError(t, err)
+	}
+	assert.True(t, s.IsDirty())
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+	newHash = contentHash(s)
+	assert.NotEqual(t, origHash, newHash, "tombstone with earlier modification time should result in new content")
+}
+
 // type dbgS3 struct {
 // S3Interface
 // }
