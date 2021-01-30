@@ -3,6 +3,7 @@ package crdt
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -16,22 +17,32 @@ type Tree struct {
 	Created      *time.Time
 	Source       *string
 	MergeSources []string
+	MergeMode    int
 }
 
+// Root identifies a tree, a persisted form, that links the mast and
+// ancestors.
 type Root struct {
 	mast.Root
 	Created      *time.Time `json:"cr,omitempty"`
 	MergeSources []string   `json:"p,omitempty"`
+	MergeMode    int        `json:"mm,omitempty"`
 }
+
+const (
+	MergeModeLWW = iota
+	MergeModeCustom
+	MergeModeCustomLWW
+)
 
 type Value struct {
 	ModEpochNanos            int64       `json:"m"`
-	PreviousRoot             string      `json:"p"`
-	TombstoneSinceEpochNanos int64       `json:"d"`
+	PreviousRoot             string      `json:"p,omitempty"`
+	TombstoneSinceEpochNanos int64       `json:"d,omitempty"`
 	Value                    interface{} `json:"v"`
 }
 
-func mergeTrees(ctx context.Context, primary *mast.Mast, grafts ...*mast.Mast) (*mast.Mast, error) {
+func mergeTrees(ctx context.Context, mergeFunc MergeFunc, conflictCB OnConflictMerged, primary *mast.Mast, grafts ...*mast.Mast) (*mast.Mast, error) {
 	if len(grafts) == 0 {
 		return primary, nil
 	}
@@ -41,29 +52,61 @@ func mergeTrees(ctx context.Context, primary *mast.Mast, grafts ...*mast.Mast) (
 	}
 
 	for _, graft := range grafts {
-		err = newTree.DiffIter(ctx, graft, func(added bool, removed bool, key interface{}, addedValue interface{}, removedValue interface{}) (bool, error) {
-			var newValue interface{}
-			if !added && !removed {
-				newValue = LastWriteWins(addedValue.(Value), removedValue.(Value))
-			} else if added {
-				newValue = addedValue
-			} else if removed {
-				newValue = removedValue
-			} else {
-				return false, fmt.Errorf("no added/removed value")
-			}
-			err := newTree.Insert(ctx, key, newValue)
-			if err != nil {
-				return false, fmt.Errorf("insert: %w", err)
-			}
-			return true, nil
-		})
+		err = newTree.DiffIter(ctx, graft, mergeFunc.ToDiffFunc(ctx, &newTree, conflictCB))
 		if err != nil {
-			return nil, fmt.Errorf("DiffIter: %w", err)
+			return nil, err
 		}
 	}
 	return &newTree, nil
 }
+
+type MergeFunc func(context.Context, *mast.Mast, bool, bool, interface{}, interface{}, interface{},
+	OnConflictMerged) (bool, error)
+
+type MergeError error
+
+func (mf MergeFunc) ToDiffFunc(ctx context.Context, m *mast.Mast, conflictCB OnConflictMerged) func(added, removed bool,
+	key, addedValue, removedValue interface{},
+) (bool, error) {
+	return func(added, removed bool, key, addedValue, removedValue interface{}) (bool, error) {
+		ok, err := mf(ctx, m, added, removed, key, addedValue, removedValue, conflictCB)
+		if err != nil {
+			err = MergeError(err)
+		}
+		return ok, err
+	}
+}
+
+var LWW MergeFunc = MergeFunc(
+	func(ctx context.Context, newTree *mast.Mast, /*, conflicts *uint64*/
+		added, removed bool, key, addedValue, removedValue interface{},
+		onConflictMerged OnConflictMerged) (bool, error) {
+		var newValue interface{}
+		if !added && !removed { // changed
+			av := addedValue.(Value)
+			rv := removedValue.(Value)
+			newValue = LastWriteWins(av, rv)
+			if onConflictMerged != nil && !av.tombstoned() && !rv.tombstoned() &&
+				!reflect.DeepEqual(av.Value, rv.Value) {
+				err := onConflictMerged(key, av.Value, rv.Value)
+				if err != nil {
+					return false, fmt.Errorf("OnConflictMerged: %w", err)
+				}
+			}
+		} else if added {
+			// already present
+			return true, nil
+		} else if removed {
+			newValue = removedValue
+		} else {
+			return false, fmt.Errorf("no added/removed value")
+		}
+		err := newTree.Insert(ctx, key, newValue)
+		if err != nil {
+			return false, fmt.Errorf("insert: %w", err)
+		}
+		return true, nil
+	})
 
 func LastWriteWins(newValue, oldValue Value) Value {
 	if newValue.tombstoned() || oldValue.tombstoned() {
@@ -100,7 +143,11 @@ type Config struct {
 	Marshal                        func(interface{}) ([]byte, error)
 	Unmarshal                      func([]byte, interface{}) error
 	UnmarshalerUsesRegisteredTypes bool
+	CustomMergeFunc                MergeFunc
+	OnConflictMerged
 }
+
+type OnConflictMerged func(key, v1, v2 interface{}) error
 
 func NewRoot(when time.Time, branchFactor uint) Root {
 	return Root{
@@ -174,12 +221,36 @@ func Load(ctx context.Context, cfg Config, rootName *string, root Root) (*Tree, 
 	if err != nil {
 		return nil, fmt.Errorf("load new root: %w", err)
 	}
+	switch root.MergeMode {
+	case MergeModeLWW:
+		if cfg.CustomMergeFunc != nil {
+			return nil, errors.New("config.CustomMergeFunc conflicts with MergeModeLWW")
+		}
+		if cfg.OnConflictMerged != nil {
+			return nil, errors.New("config.OnConflictMerged handler conflicts with MergeModeLWW")
+		}
+	case MergeModeCustom:
+		if cfg.CustomMergeFunc == nil {
+			return nil, errors.New("MergeModeCustom requires config.CustomMergeFunc")
+		}
+		if cfg.OnConflictMerged != nil {
+			return nil, errors.New("config.OnConflictMerged handler conflicts with MergeModeCustom")
+		}
+	case MergeModeCustomLWW:
+		if cfg.OnConflictMerged == nil {
+			return nil, errors.New("MergeModeCustomLWW requires config.OnConflictMerged")
+		}
+		if cfg.CustomMergeFunc != nil {
+			return nil, errors.New("config.CustomMergeFunc handler conflicts with MergeModeCustomLWW")
+		}
+	}
 	return &Tree{
 		cfg,
 		m,
 		root.Created,
 		rootName,
 		root.MergeSources,
+		root.MergeMode,
 	}, nil
 }
 
@@ -192,14 +263,24 @@ func (c *Tree) MakeRoot(ctx context.Context) (*Root, error) {
 		Root:         *mastRoot,
 		Created:      c.Created,
 		MergeSources: c.MergeSources,
+		MergeMode:    c.MergeMode,
 	}
 	return &crdtRoot, nil
 }
 
 func (c *Tree) Merge(ctx context.Context, other *Tree) error {
-	m, err := mergeTrees(ctx, c.Mast, other.Mast)
+	if c.MergeMode != other.MergeMode {
+		return fmt.Errorf("incoming graft has different MergeMode %d than local %d", other.MergeMode, c.MergeMode)
+	}
+	var mergeFunc MergeFunc
+	if c.MergeMode == MergeModeCustom {
+		mergeFunc = c.Config.CustomMergeFunc
+	} else {
+		mergeFunc = LWW
+	}
+	m, err := mergeTrees(ctx, mergeFunc, c.Config.OnConflictMerged, c.Mast, other.Mast)
 	if err != nil {
-		return fmt.Errorf("mergeTrees: %w", err)
+		return err
 	}
 	c.Mast = m
 	if other.Source != nil {
@@ -249,10 +330,11 @@ func (c *Tree) update(ctx context.Context, when time.Time, key interface{}, cv V
 	if contains {
 		winner := LastWriteWins(cv, existing)
 		if winner != existing {
-			if c.Source == nil {
-				return fmt.Errorf("expected Source to be set")
+			if c.Source != nil {
+				winner.PreviousRoot = *c.Source
+			} else {
+				winner.PreviousRoot = ""
 			}
-			winner.PreviousRoot = *c.Source
 		}
 		err = c.Mast.Insert(ctx, key, winner)
 	} else {

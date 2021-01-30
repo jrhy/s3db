@@ -29,6 +29,7 @@ import (
 var ctx = context.Background()
 
 func TestS3Copy(t *testing.T) {
+	t.Parallel()
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
 
@@ -71,6 +72,7 @@ func TestS3Copy(t *testing.T) {
 }
 
 func TestListRoots_Empty(t *testing.T) {
+	t.Parallel()
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
 	cfg := Config{
@@ -92,6 +94,7 @@ func TestListRoots_Empty(t *testing.T) {
 }
 
 func TestS3DBHappyCase(t *testing.T) {
+	t.Parallel()
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
 	cfg := Config{
@@ -206,6 +209,7 @@ func (s *screwyS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInpu
 }
 
 func TestDelayedNode(t *testing.T) {
+	t.Parallel()
 	realC, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
 	cfg := Config{
@@ -268,6 +272,7 @@ func (t *TestTime) next() time.Time {
 }
 
 func TestVersionGraph(t *testing.T) {
+	t.Parallel()
 	tm := newTestTime()
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -382,12 +387,12 @@ func getNodesForRoot(ctx context.Context, s *DB, rootName string, persist mast.P
 	}
 	tree, err := crdt.Load(ctx, s.crdt.Config, &rootName, *root)
 	if err != nil {
-		panic("new root")
+		panic(fmt.Errorf("new root: %w", err))
 	}
 	empty := crdt.NewRoot(time.Time{}, 0)
 	emptyTree, err := crdt.Load(ctx, s.crdt.Config, nil, empty)
 	if err != nil {
-		panic("new root")
+		panic(fmt.Errorf("empty root: %w", err))
 	}
 	res := []string{}
 	err = tree.Mast.DiffLinks(ctx, emptyTree.Mast,
@@ -454,6 +459,7 @@ func bucketContentHashForPrefix(s S3Interface, bucketName, prefix string) string
 }
 
 func TestAggregation(t *testing.T) {
+	t.Parallel()
 	tm := newTestTime()
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -567,6 +573,7 @@ func (s *countyS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInpu
 }
 
 func TestDefaultNodeCacheOff(t *testing.T) {
+	t.Parallel()
 	tm := newTestTime()
 	realC, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -607,6 +614,7 @@ func TestDefaultNodeCacheOff(t *testing.T) {
 }
 
 func TestNodeCache(t *testing.T) {
+	t.Parallel()
 	tm := newTestTime()
 	realC, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -655,6 +663,7 @@ func TestNodeCache(t *testing.T) {
 }
 
 func TestRedundantCommitDoesNotWriteToBucket(t *testing.T) {
+	t.Parallel()
 	tm := newTestTime()
 	realC, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -684,6 +693,7 @@ func TestRedundantCommitDoesNotWriteToBucket(t *testing.T) {
 }
 
 func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
+	t.Parallel()
 	tm := newTestTime()
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -730,6 +740,7 @@ func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
 }
 
 func TestTombstoneVersusModTime(t *testing.T) {
+	t.Parallel()
 	tm := newTestTime()
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -805,6 +816,7 @@ func TestTombstoneVersusModTime(t *testing.T) {
 // }
 
 func TestUpdateVsDeleteConflict(t *testing.T) {
+	t.Parallel()
 	updateThenDelete := "updateThenDelete"
 	deleteThenUpdate := "deleteThenUpdate"
 	updateOnly := "updateOnly"
@@ -847,15 +859,20 @@ func TestUpdateVsDeleteConflict(t *testing.T) {
 }
 
 func createTestTree(name string, key, value interface{}, keyVals ...interface{}) (*DB, S3Interface, Config, TestTime, func()) {
+	return createTestTreeWithConfig(name, nil, key, value, keyVals...)
+}
+func createTestTreeWithConfig(name string, baseCfg *Config, key, value interface{}, keyVals ...interface{}) (*DB, S3Interface, Config, TestTime, func()) {
 	tm := newTestTime()
 	c, bucketName, closer := s3test.Client()
 	// dbgC:=&dbgS3{c}
-	cfg := Config{
-		Storage:      &S3BucketInfo{c.Endpoint, bucketName, name},
-		KeysLike:     key,
-		ValuesLike:   value,
-		BranchFactor: 4,
+	var cfg Config
+	if baseCfg != nil {
+		cfg = *baseCfg
 	}
+	cfg.Storage = &S3BucketInfo{c.Endpoint, bucketName, name}
+	cfg.KeysLike = key
+	cfg.ValuesLike = value
+	cfg.BranchFactor = 4
 	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
 	if err != nil {
 		panic(err)
@@ -880,6 +897,7 @@ func createTestTree(name string, key, value interface{}, keyVals ...interface{})
 }
 
 func TestStructKeysAndValues(t *testing.T) {
+	t.Parallel()
 	type key struct {
 		A int
 		B string
@@ -938,6 +956,7 @@ func TestStructKeysAndValues(t *testing.T) {
 }
 
 func TestTombstoneRemoval(t *testing.T) {
+	t.Parallel()
 	s, c, cfg, tm, closer := createTestTree("TombstoneRemoval",
 		0, "tombstone",
 		1, "tombstoneLater",
@@ -985,6 +1004,7 @@ func reopen(s **DB, c S3Interface, cfg Config, tm time.Time) {
 }
 
 func TestDeleteHistory(t *testing.T) {
+	t.Parallel()
 	s, c, cfg, tm, closer := createTestTree("DeleteHistory",
 		1, "preserve",
 		4, "preserve",
@@ -1059,6 +1079,7 @@ func TestDeleteHistory(t *testing.T) {
 }
 
 func TestDecryptionWithWrongKey(t *testing.T) {
+	t.Parallel()
 	tm := newTestTime()
 	c, bucketName, closer := s3test.Client()
 	cfg := Config{
@@ -1082,6 +1103,7 @@ func TestDecryptionWithWrongKey(t *testing.T) {
 }
 
 func TestTraceHistory(t *testing.T) {
+	t.Parallel()
 	s, c, cfg, tm, closer := createTestTree("traceHistory", "foo", 1)
 	defer closer()
 	reopen(&s, c, cfg, tm.next())
@@ -1095,4 +1117,170 @@ func TestTraceHistory(t *testing.T) {
 		return true, nil
 	}))
 	require.Equal(t, []int{3, 2, 1}, history)
+}
+
+func TestConflictDetection(t *testing.T) {
+	t.Parallel()
+
+	t.Run("HappyCase", func(t *testing.T) {
+		t.Parallel()
+		conflicts := 0
+		cfg := Config{
+			OnConflictMerged: func(key, v1, v2 interface{}) error {
+				conflicts++
+				return nil
+			},
+		}
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_happycase", &cfg, "key", 1)
+		defer closer()
+		sAddition1, err := s.Clone(ctx)
+		require.NoError(t, err)
+		require.NoError(t, sAddition1.Set(ctx, tm.next(), "key2", 1))
+		_, err = sAddition1.Commit(ctx)
+		require.NoError(t, err)
+		sAddition2, err := s.Clone(ctx)
+		require.NoError(t, err)
+		require.NoError(t, sAddition2.Set(ctx, tm.next(), "key2", 2))
+		_, err = sAddition2.Commit(ctx)
+		require.NoError(t, err)
+		reopen(&s, c, cfg, tm.next())
+		require.Equal(t, 1, conflicts)
+		require.NoError(t, s.Set(ctx, tm.next(), "foo", "bar"))
+		reopen(&s, c, cfg, tm.next())
+		require.NoError(t, s.Set(ctx, tm.next(), "foo2", "bar"))
+		reopen(&s, c, cfg, tm.next())
+		require.NoError(t, s.Set(ctx, tm.next(), "foo3", "bar"))
+		reopen(&s, c, cfg, tm.next())
+		require.Equal(t, 1, conflicts)
+	})
+
+	t.Run("AdditionIsNotAConflict", func(t *testing.T) {
+		t.Parallel()
+		conflicts := 0
+		cfg := Config{
+			OnConflictMerged: func(key, v1, v2 interface{}) error {
+				conflicts++
+				return nil
+			},
+		}
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_addition", &cfg, "key", 1)
+		defer closer()
+		sAddition1, err := s.Clone(ctx)
+		require.NoError(t, err)
+		at := tm.next()
+		require.NoError(t, sAddition1.Set(ctx, at, "key2", 1))
+		_, err = sAddition1.Commit(ctx)
+		require.NoError(t, err)
+		sAddition2, err := s.Clone(ctx)
+		require.NoError(t, err)
+		require.NoError(t, sAddition2.Set(ctx, at, "key3", 1))
+		_, err = sAddition2.Commit(ctx)
+		require.NoError(t, err)
+		reopen(&s, c, cfg, tm.next())
+		require.Equal(t, 0, conflicts)
+	})
+
+	t.Run("IdempotentUpdateIsNotAConflict", func(t *testing.T) {
+		t.Parallel()
+		conflicts := 0
+		cfg := Config{
+			OnConflictMerged: func(key, v1, v2 interface{}) error {
+				fmt.Printf("key=%v, v1=%v vs v2=%v\n", key, v1, v2)
+				conflicts++
+				return nil
+			},
+		}
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_idempotent_update", &cfg, "key", 1)
+		defer closer()
+
+		sAddition1, err := s.Clone(ctx)
+		require.NoError(t, err)
+		sAddition2, err := s.Clone(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, sAddition1.Set(ctx, tm.next(), "key2", 1))
+		_, err = sAddition1.Commit(ctx)
+		require.NoError(t, err)
+		require.NoError(t, sAddition2.Set(ctx, tm.next(), "key2", 1))
+		_, err = sAddition2.Commit(ctx)
+		require.NoError(t, err)
+
+		reopen(&s, c, cfg, tm.next())
+		require.Equal(t, 0, conflicts)
+	})
+
+	t.Run("SetWithoutMergeIsNotAConflict", func(t *testing.T) {
+		t.Parallel()
+		conflicts := 0
+		cfg := Config{
+			OnConflictMerged: func(key, v1, v2 interface{}) error {
+				conflicts++
+				return nil
+			},
+		}
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_sametree", &cfg, "key", 1)
+		defer closer()
+		require.NoError(t, s.Set(ctx, tm.next(), "key", 2))
+		require.Equal(t, 0, conflicts)
+		// not necessary to commit, but check anyway
+		reopen(&s, c, cfg, tm.next())
+		require.Equal(t, 0, conflicts)
+	})
+
+	t.Run("TombstoneIsNotAConflict", func(t *testing.T) {
+		t.Parallel()
+		conflicts := 0
+		cfg := Config{
+			OnConflictMerged: func(key, v1, v2 interface{}) error {
+				conflicts++
+				return nil
+			},
+		}
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_tombstone", &cfg, "key", 1)
+		defer closer()
+		sAddition1, err := s.Clone(ctx)
+		require.NoError(t, err)
+		require.NoError(t, sAddition1.Set(ctx, tm.next(), "key2", 1))
+		_, err = sAddition1.Commit(ctx)
+		require.NoError(t, err)
+		sTombstone, err := s.Clone(ctx)
+		require.NoError(t, err)
+		require.NoError(t, sTombstone.Tombstone(ctx, tm.next(), "key2"))
+		_, err = sTombstone.Commit(ctx)
+		require.NoError(t, err)
+		reopen(&s, c, cfg, tm.next())
+		require.Equal(t, 0, conflicts)
+	})
+
+	t.Run("ErrorStop", func(t *testing.T) {
+		t.Parallel()
+		conflicts := 0
+		errKO := errors.New("momma said knock you out")
+		cfg := Config{
+			OnConflictMerged: func(key, v1, v2 interface{}) error {
+				conflicts++
+				return errKO
+			},
+		}
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_errorstop", &cfg, "key", 1)
+		defer closer()
+		_, err := s.Commit(ctx)
+		require.NoError(t, err)
+		s1, err := s.Clone(ctx)
+		require.NoError(t, err)
+		require.NoError(t, s1.Set(ctx, tm.next(), "key2", 1))
+		require.NoError(t, s1.Set(ctx, tm.next(), "key3", 1))
+		_, err = s1.Commit(ctx)
+		require.NoError(t, err)
+		s2, err := s.Clone(ctx)
+		require.NoError(t, err)
+		require.NoError(t, s2.Set(ctx, tm.next(), "key2", 2))
+		require.NoError(t, s2.Set(ctx, tm.next(), "key3", 2))
+		_, err = s2.Commit(ctx)
+		require.NoError(t, err)
+		_, err = Open(ctx, c, cfg, OpenOptions{}, tm.next())
+		require.EqualError(t, err, "merge: callback error: OnConflictMerged: momma said knock you out")
+		require.Equal(t, 1, conflicts)
+	})
+
 }

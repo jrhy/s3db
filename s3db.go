@@ -50,20 +50,29 @@ type DB struct {
 // Config defines how values are stored and (un)marshaled.
 type Config struct {
 	// S3 endpoint, bucket name, and database prefix
-	Storage          *S3BucketInfo
+	Storage *S3BucketInfo
 	// An optional label that will be added to committed versions' names for easier listing (e.g. "daily-report-")
 	CustomRootPrefix string
 	// An example of a key, to know what concrete type to make when unmarshaling
-	KeysLike         interface{}
+	KeysLike interface{}
 	// An example of a value, to know what concrete type to make when unmarshaling
-	ValuesLike       interface{}
+	ValuesLike interface{}
 	// Sets the entries-per-S3 object for new trees (ignored unless tree is empty)
-	BranchFactor  uint
+	BranchFactor uint
 	// An optional S3-endpoint-scoped cache, instead of re-downloading recently-used tree nodes
-	NodeCache     mast.NodeCache
+	NodeCache mast.NodeCache
 	// A way to keep your cloud provider out of your nodes
 	NodeEncryptor Encryptor
+	// OnConflictMerged is a callback that will be invoked whenever entries for a key have
+	// different values in different trees that are being merged. It can be used to detect
+	// when a uniqueness constraint has been broken and which keys need fixing.
+	OnConflictMerged
 }
+
+// OnConflictMerged is a callback that will be invoked whenever entries for a key have
+// different values in different trees that are being merged. It can be used to detect
+// when a uniqueness constraint has been broken and which keys need fixing.
+type OnConflictMerged func(key, v1, v2 interface{}) error
 
 // Encryptor encrypts bytes with a nonce derived from the given path.
 type Encryptor interface {
@@ -138,6 +147,9 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 		Marshal:                        marshalGob,
 		Unmarshal:                      unmarshalGob,
 		UnmarshalerUsesRegisteredTypes: true,
+	}
+	if cfg.OnConflictMerged != nil {
+		crdtConfig.OnConflictMerged = crdt.OnConflictMerged(cfg.OnConflictMerged)
 	}
 	if opts.SingleVersion != "" {
 		root, _, err := loadNamedRoot(ctx, rootPersist, mergedPersist, opts.SingleVersion)
@@ -249,6 +261,9 @@ func mergeRoots(
 		return nil, nil, 0, fmt.Errorf("s3 list: %w", err)
 	}
 
+	// Even if we can't merge all the roots, due to errors, it's nice to make some
+	// progress merging what we can. In order to not be persistently blocked by a
+	// lowest-named root, we randomize the order.
 	rand.Shuffle(len(roots), func(i, j int) {
 		roots[i], roots[j] = roots[j], roots[i]
 	})
@@ -285,6 +300,9 @@ func mergeRoots(
 				continue
 			}
 			err = newTree.Merge(ctx, graft)
+			if _, ok := err.(crdt.MergeError); ok {
+				return nil, nil, 0, err
+			}
 			if err != nil {
 				// log.info...
 				continue
@@ -298,9 +316,14 @@ func mergeRoots(
 
 	if tree == nil {
 		empty := crdt.NewRoot(when, cfg.BranchFactor)
+		if crdtConfig.CustomMergeFunc != nil {
+			empty.MergeMode = crdt.MergeModeCustom
+		} else if crdtConfig.OnConflictMerged != nil {
+			empty.MergeMode = crdt.MergeModeCustomLWW
+		}
 		tree, err = crdt.Load(ctx, crdtConfig, nil, empty)
 		if err != nil {
-			return nil, nil, 0, fmt.Errorf("new root")
+			return nil, nil, 0, fmt.Errorf("new root: %w", err)
 		}
 	} else {
 		if len(mergedRoots) == 1 {

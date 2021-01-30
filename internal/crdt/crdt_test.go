@@ -168,7 +168,7 @@ func TestFile(t *testing.T) {
 	assert.Equal(t, MyObject{"b"}, v)
 }
 
-func TestImmediateDeletion(t *testing.T) {
+func TestCustomMergeFunc(t *testing.T) {
 	dir, err := ioutil.TempDir("", "s3dbtest")
 	require.NoError(t, err)
 
@@ -177,12 +177,56 @@ func TestImmediateDeletion(t *testing.T) {
 	type MyObject struct {
 		A string
 	}
+	var CountConflicts MergeFunc = MergeFunc(
+		func(ctx context.Context, newTree *mast.Mast, /*, conflicts *uint64*/
+			added, removed bool, key, addedValue, removedValue interface{},
+			conflictCB OnConflictMerged) (bool, error) {
+			var newValue interface{}
+			if !added && !removed { // changed
+				av := addedValue.(Value)
+				rv := removedValue.(Value)
+				newValue = LastWriteWins(av, rv)
+				var cv Value
+				ok, err := newTree.Get(ctx, "conflicts", &cv)
+				if err != nil {
+					return false, fmt.Errorf("get conflict counter value: %w", err)
+				}
+				if ok && cv.Value != nil {
+					cv.Value = cv.Value.(uint64) + 1
+				} else {
+					cv.Value = uint64(1)
+				}
+				err = newTree.Insert(ctx, "conflicts", cv)
+				if err != nil {
+					return false, fmt.Errorf("set conflict counter value: %w", err)
+				}
+				return true, nil
+			} else if added {
+				// already present
+				return true, nil
+			} else if removed {
+				newValue = removedValue
+			} else {
+				return false, fmt.Errorf("no added/removed value")
+			}
+			err := newTree.Insert(ctx, key, newValue)
+			if err != nil {
+				return false, fmt.Errorf("insert: %w", err)
+			}
+			return true, nil
+		})
 
 	empty := NewRoot(time.Now(), mast.DefaultBranchFactor)
+	empty.MergeMode = MergeModeCustom
+	gob.Register(Value{})
+	gob.Register(MyObject{})
 	cfg := Config{
-		KeysLike:                "hi",
-		ValuesLike:              MyObject{},
-		StoreImmutablePartsWith: persist,
+		KeysLike:                       "hi",
+		StoreImmutablePartsWith:        persist,
+		Marshal:                        marshalGob,
+		Unmarshal:                      unmarshalGob,
+		UnmarshalerUsesRegisteredTypes: true,
+		CustomMergeFunc:                CountConflicts,
 	}
 
 	s1, err := Load(ctx, cfg, nil, empty)
@@ -206,16 +250,23 @@ func TestImmediateDeletion(t *testing.T) {
 
 	err = s1.Merge(ctx, s2)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(1), s1.Size())
+	assert.Equal(t, uint64(2), s1.Size())
 	assert.Equal(t, uint64(1), s2.Size())
 	found, err = s1.Get(ctx, "user1", &v)
 	require.NoError(t, err)
 	assert.True(t, found)
-	assert.Equal(t, MyObject{"b"}, v)
+	assert.Equal(t, MyObject{"a"}, v)
 
 	s1Root, err := s1.MakeRoot(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, s1Root, s2Root)
+	var s1Conflicts, s2Conflicts uint64
+	_, err = s1.Get(ctx, "conflicts", &s1Conflicts)
+	require.NoError(t, err)
+	_, err = s2.Get(ctx, "conflicts", &s2Conflicts)
+	assert.Equal(t, uint64(1), s1Conflicts)
+	assert.Equal(t, uint64(0), s2Conflicts)
+	assert.Equal(t, uint64(2), s1Root.Size)
+	assert.Equal(t, uint64(1), s2Root.Size)
 }
 
 func marshalGob(thing interface{}) ([]byte, error) {
