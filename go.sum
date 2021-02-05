@@ -1,6 +1,6 @@
 github.com/aws/aws-sdk-go v1.17.4/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN924inxo=
-github.com/aws/aws-sdk-go v1.37.1 h1:BTHmuN+gzhxkvU9sac2tZvaY0gV9ihbHw+KxZOecYvY=
-github.com/aws/aws-sdk-go v1.37.1/go.mod h1:hcU610XS61/+aQV88ixoOzUoG7v3b31pl2zKMmprdro=
+github.com/aws/aws-sdk-go v1.37.5 h1:9zJ1aXRk1gLSWEeaMXa7Hbv1pIM915T2tpaIJi0+mkA=
+github.com/aws/aws-sdk-go v1.37.5/go.mod h1:hcU610XS61/+aQV88ixoOzUoG7v3b31pl2zKMmprdro=
 github.com/boltdb/bolt v1.3.1/go.mod h1:clJnj/oiGkjum5o1McbSZDSLxVThjynRyGBgiAx27Ps=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -15,10 +15,10 @@ github.com/jmespath/go-jmespath v0.4.0 h1:BEgLn5cpjn8UN1mAw4NjwDrS35OdebyEtFe+9Y
 github.com/jmespath/go-jmespath v0.4.0/go.mod h1:T8mJZnbsbmF+m6zOOFylbeCJqk5+pHWvzYPziyZiYoo=
 github.com/jmespath/go-jmespath/internal/testify v1.5.1 h1:shLQSRRSCCPj3f2gpwzGwWFoC7ycTf1rcQZHOlsJ6N8=
 github.com/jmespath/go-jmespath/internal/testify v1.5.1/go.mod h1:L3OGu8Wl2/fWfCI6z80xFu9LTZmf1ZRjMHUOPmWr69U=
-github.com/johannesboyne/gofakes3 v0.0.0-20210124080349-901cf567bf01 h1:OgeS46YxpBWMY1AB5asiZyTP2kRlH/Wlm94YwuusRak=
-github.com/johannesboyne/gofakes3 v0.0.0-20210124080349-901cf567bf01/go.mod h1:fNiSoOiEI5KlkWXn26OwKnNe58ilTIkpBlgOrt7Olu8=
-github.com/jrhy/mast v1.0.10 h1:XeeIcCxsvk4G2Q647PWR39Ew6aiEX0dGCpDFMs4Md1g=
-github.com/jrhy/mast v1.0.10/go.mod h1:SaC1eDaH/6z2a6QJ9IfO/pocAkr+7tVMJZ0rUF0HpMI=
+github.com/johannesboyne/gofakes3 v0.0.0-20210204122015-ecdfbfd192ee h1:naTCpfKmWmnE+igJdFQomqspSz05+doPJq5jFBce9YA=
+github.com/johannesboyne/gofakes3 v0.0.0-20210204122015-ecdfbfd192ee/go.mod h1:J4FxOevfdoOz0ZKqoWO3l2QSQqrNpWLBRQCxU/t8R00=
+github.com/jrhy/mast v1.0.11-0.20210205050908-089caeb6bf17 h1:QtxfCvx/l/E1y+XtxY+iAXnqUNTG63VXrfWnsK92MXA=
+github.com/jrhy/mast v1.0.11-0.20210205050908-089caeb6bf17/go.mod h1:d1NLKilydop8+1/L06HU3LI0StD+NkRySahwUmkHkhc=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
