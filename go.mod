@@ -3,7 +3,7 @@ module github.com/jrhy/s3db
 go 1.14
 
 require (
-	github.com/aws/aws-sdk-go v1.37.5
+	github.com/aws/aws-sdk-go v1.37.6
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/johannesboyne/gofakes3 v0.0.0-20210204122015-ecdfbfd192ee
 	github.com/jrhy/mast v1.0.11-0.20210205050908-089caeb6bf17
