@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/big"
 	"math/rand"
+	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -676,7 +677,7 @@ func (s DB) Diff(
 		) (keepGoing bool, err error) {
 			myValue := innerValue(addedValue)
 			fromValue := innerValue(removedValue)
-			if myValue == fromValue {
+			if reflect.DeepEqual(myValue, fromValue) {
 				return true, nil
 			}
 			return f(key, innerValue(addedValue), innerValue(removedValue))
