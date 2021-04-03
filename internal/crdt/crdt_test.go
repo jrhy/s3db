@@ -181,11 +181,11 @@ func TestCustomMergeFunc(t *testing.T) {
 		func(ctx context.Context, newTree *mast.Mast, /*, conflicts *uint64*/
 			added, removed bool, key, addedValue, removedValue interface{},
 			conflictCB OnConflictMerged) (bool, error) {
-			var newValue interface{}
+			var newValue Value
 			if !added && !removed { // changed
 				av := addedValue.(Value)
 				rv := removedValue.(Value)
-				newValue = LastWriteWins(av, rv)
+				newValue = *LastWriteWins(&av, &rv)
 				var cv Value
 				ok, err := newTree.Get(ctx, "conflicts", &cv)
 				if err != nil {
@@ -205,7 +205,7 @@ func TestCustomMergeFunc(t *testing.T) {
 				// already present
 				return true, nil
 			} else if removed {
-				newValue = removedValue
+				newValue = removedValue.(Value)
 			} else {
 				return false, fmt.Errorf("no added/removed value")
 			}

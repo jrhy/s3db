@@ -680,7 +680,7 @@ func (s DB) Diff(
 			if reflect.DeepEqual(myValue, fromValue) {
 				return true, nil
 			}
-			return f(key, innerValue(addedValue), innerValue(removedValue))
+			return f(key, myValue, fromValue)
 		})
 	return err
 }

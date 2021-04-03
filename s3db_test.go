@@ -29,7 +29,9 @@ import (
 var ctx = context.Background()
 
 func TestS3Copy(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
 
@@ -72,7 +74,9 @@ func TestS3Copy(t *testing.T) {
 }
 
 func TestListRoots_Empty(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
 	cfg := Config{
@@ -94,7 +98,9 @@ func TestListRoots_Empty(t *testing.T) {
 }
 
 func TestS3DBHappyCase(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
 	cfg := Config{
@@ -209,7 +215,9 @@ func (s *screwyS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInpu
 }
 
 func TestDelayedNode(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	realC, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
 	cfg := Config{
@@ -272,7 +280,9 @@ func (t *TestTime) next() time.Time {
 }
 
 func TestVersionGraph(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	tm := newTestTime()
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -459,7 +469,9 @@ func bucketContentHashForPrefix(s S3Interface, bucketName, prefix string) string
 }
 
 func TestAggregation(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	tm := newTestTime()
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -491,7 +503,7 @@ func TestAggregation(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("open secondary: %w", err)
 		}
-		dd := DerivedData{}
+		var dd DerivedData
 		ok, err := secondary.Get(ctx, "latest", &dd)
 		if err != nil {
 			return fmt.Errorf("get state: %w", err)
@@ -545,6 +557,21 @@ func TestAggregation(t *testing.T) {
 		panic(err)
 	}
 	require.Equal(t, 1, lastDD.Count)
+
+	primary, err = Open(ctx, c, primaryConfig, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	err = primary.Set(ctx, tm.next(), 1, "b")
+	require.NoError(t, err)
+	err = primary.Set(ctx, tm.next(), 2, "b")
+	require.NoError(t, err)
+	_, err = primary.Commit(ctx)
+	require.NoError(t, err)
+
+	err = updateSecondary()
+	if err != nil {
+		panic(err)
+	}
+	require.Equal(t, 2, lastDD.Count)
 }
 
 type countyS3 struct {
@@ -573,7 +600,6 @@ func (s *countyS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInpu
 }
 
 func TestDefaultNodeCacheOff(t *testing.T) {
-	t.Parallel()
 	tm := newTestTime()
 	realC, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -614,7 +640,9 @@ func TestDefaultNodeCacheOff(t *testing.T) {
 }
 
 func TestNodeCache(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	tm := newTestTime()
 	realC, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -663,7 +691,9 @@ func TestNodeCache(t *testing.T) {
 }
 
 func TestRedundantCommitDoesNotWriteToBucket(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	tm := newTestTime()
 	realC, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -693,7 +723,9 @@ func TestRedundantCommitDoesNotWriteToBucket(t *testing.T) {
 }
 
 func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	tm := newTestTime()
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -740,7 +772,9 @@ func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
 }
 
 func TestTombstoneVersusModTime(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	tm := newTestTime()
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
@@ -816,7 +850,9 @@ func TestTombstoneVersusModTime(t *testing.T) {
 // }
 
 func TestUpdateVsDeleteConflict(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	updateThenDelete := "updateThenDelete"
 	deleteThenUpdate := "deleteThenUpdate"
 	updateOnly := "updateOnly"
@@ -897,7 +933,9 @@ func createTestTreeWithConfig(name string, baseCfg *Config, key, value interface
 }
 
 func TestStructKeysAndValues(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	type key struct {
 		A int
 		B string
@@ -956,7 +994,9 @@ func TestStructKeysAndValues(t *testing.T) {
 }
 
 func TestTombstoneRemoval(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	s, c, cfg, tm, closer := createTestTree("TombstoneRemoval",
 		0, "tombstone",
 		1, "tombstoneLater",
@@ -1004,7 +1044,9 @@ func reopen(s **DB, c S3Interface, cfg Config, tm time.Time) {
 }
 
 func TestDeleteHistory(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	s, c, cfg, tm, closer := createTestTree("DeleteHistory",
 		1, "preserve",
 		4, "preserve",
@@ -1079,7 +1121,9 @@ func TestDeleteHistory(t *testing.T) {
 }
 
 func TestDecryptionWithWrongKey(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	tm := newTestTime()
 	c, bucketName, closer := s3test.Client()
 	cfg := Config{
@@ -1103,7 +1147,9 @@ func TestDecryptionWithWrongKey(t *testing.T) {
 }
 
 func TestTraceHistory(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 	s, c, cfg, tm, closer := createTestTree("traceHistory", "foo", 1)
 	defer closer()
 	reopen(&s, c, cfg, tm.next())
@@ -1120,10 +1166,14 @@ func TestTraceHistory(t *testing.T) {
 }
 
 func TestConflictDetection(t *testing.T) {
-	t.Parallel()
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
 
 	t.Run("HappyCase", func(t *testing.T) {
-		t.Parallel()
+		if s3test.CanParallelize() {
+			t.Parallel()
+		}
 		conflicts := 0
 		cfg := Config{
 			OnConflictMerged: func(key, v1, v2 interface{}) error {
@@ -1155,7 +1205,9 @@ func TestConflictDetection(t *testing.T) {
 	})
 
 	t.Run("AdditionIsNotAConflict", func(t *testing.T) {
-		t.Parallel()
+		if s3test.CanParallelize() {
+			t.Parallel()
+		}
 		conflicts := 0
 		cfg := Config{
 			OnConflictMerged: func(key, v1, v2 interface{}) error {
@@ -1181,7 +1233,9 @@ func TestConflictDetection(t *testing.T) {
 	})
 
 	t.Run("IdempotentUpdateIsNotAConflict", func(t *testing.T) {
-		t.Parallel()
+		if s3test.CanParallelize() {
+			t.Parallel()
+		}
 		conflicts := 0
 		cfg := Config{
 			OnConflictMerged: func(key, v1, v2 interface{}) error {
@@ -1210,7 +1264,9 @@ func TestConflictDetection(t *testing.T) {
 	})
 
 	t.Run("SetWithoutMergeIsNotAConflict", func(t *testing.T) {
-		t.Parallel()
+		if s3test.CanParallelize() {
+			t.Parallel()
+		}
 		conflicts := 0
 		cfg := Config{
 			OnConflictMerged: func(key, v1, v2 interface{}) error {
@@ -1228,7 +1284,9 @@ func TestConflictDetection(t *testing.T) {
 	})
 
 	t.Run("TombstoneIsNotAConflict", func(t *testing.T) {
-		t.Parallel()
+		if s3test.CanParallelize() {
+			t.Parallel()
+		}
 		conflicts := 0
 		cfg := Config{
 			OnConflictMerged: func(key, v1, v2 interface{}) error {
@@ -1253,7 +1311,9 @@ func TestConflictDetection(t *testing.T) {
 	})
 
 	t.Run("ErrorStop", func(t *testing.T) {
-		t.Parallel()
+		if s3test.CanParallelize() {
+			t.Parallel()
+		}
 		conflicts := 0
 		errKO := errors.New("momma said knock you out")
 		cfg := Config{

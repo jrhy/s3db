@@ -81,11 +81,11 @@ var LWW MergeFunc = MergeFunc(
 	func(ctx context.Context, newTree *mast.Mast, /*, conflicts *uint64*/
 		added, removed bool, key, addedValue, removedValue interface{},
 		onConflictMerged OnConflictMerged) (bool, error) {
-		var newValue interface{}
+		var newValue Value
 		if !added && !removed { // changed
 			av := addedValue.(Value)
 			rv := removedValue.(Value)
-			newValue = LastWriteWins(av, rv)
+			newValue = *LastWriteWins(&av, &rv)
 			if onConflictMerged != nil && !av.tombstoned() && !rv.tombstoned() &&
 				!reflect.DeepEqual(av.Value, rv.Value) {
 				err := onConflictMerged(key, av.Value, rv.Value)
@@ -97,7 +97,7 @@ var LWW MergeFunc = MergeFunc(
 			// already present
 			return true, nil
 		} else if removed {
-			newValue = removedValue
+			newValue = removedValue.(Value)
 		} else {
 			return false, fmt.Errorf("no added/removed value")
 		}
@@ -108,7 +108,7 @@ var LWW MergeFunc = MergeFunc(
 		return true, nil
 	})
 
-func LastWriteWins(newValue, oldValue Value) Value {
+func LastWriteWins(newValue, oldValue *Value) *Value {
 	if newValue.tombstoned() || oldValue.tombstoned() {
 		return firstTombstoneWins(newValue, oldValue)
 	}
@@ -122,7 +122,7 @@ func (v Value) tombstoned() bool {
 	return v.TombstoneSinceEpochNanos != 0
 }
 
-func firstTombstoneWins(newValue, oldValue Value) Value {
+func firstTombstoneWins(newValue, oldValue *Value) *Value {
 	if !newValue.tombstoned() {
 		return oldValue
 	}
@@ -328,8 +328,10 @@ func (c *Tree) update(ctx context.Context, when time.Time, key interface{}, cv V
 		return fmt.Errorf("get existing: %w", err)
 	}
 	if contains {
-		winner := LastWriteWins(cv, existing)
-		if winner != existing {
+		var wa *Value
+		wa = LastWriteWins(&cv, &existing)
+		winner := *wa
+		if wa != &existing {
 			if c.Source != nil {
 				winner.PreviousRoot = *c.Source
 			} else {
