@@ -25,7 +25,12 @@ func init() {
 
 func (sa *subcommandArgs) dump() func(interface{}, interface{}, interface{}) (bool, error) {
 	return func(key, myValue, fromValue interface{}) (keepGoing bool, err error) {
-		fmt.Fprintf(sa.Stdout, "%v: %v\n", key, myValue)
+		switch x := myValue.(type) {
+		case []byte:
+			fmt.Fprintf(sa.Stdout, "%v: %s\n", key, string(x))
+		default:
+			fmt.Fprintf(sa.Stdout, "%v: %v\n", key, x)
+		}
 		return true, nil
 	}
 }
