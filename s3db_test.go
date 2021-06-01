@@ -612,7 +612,7 @@ func TestDefaultNodeCacheOff(t *testing.T) {
 	c := &countyS3{S3: *realC}
 	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
 	require.NoError(t, err)
-	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
 		err := s.Set(ctx, tm.next(), i, "")
 		require.NoError(t, err)
 	}
@@ -655,7 +655,7 @@ func TestNodeCache(t *testing.T) {
 	c := &countyS3{S3: *realC}
 	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
 	require.NoError(t, err)
-	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
 		err := s.Set(ctx, tm.next(), i, "")
 		require.NoError(t, err)
 	}
@@ -706,7 +706,7 @@ func TestRedundantCommitDoesNotWriteToBucket(t *testing.T) {
 	c := &countyS3{S3: *realC}
 	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
 	require.NoError(t, err)
-	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
 		err := s.Set(ctx, tm.next(), i, "")
 		require.NoError(t, err)
 	}
@@ -738,7 +738,7 @@ func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
 	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
 	require.NoError(t, err)
 	origTime := tm.next()
-	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
 		err := s.Set(ctx, origTime, i, "")
 		require.NoError(t, err)
 	}
@@ -749,7 +749,7 @@ func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
 
 	origHash := contentHash(s)
 
-	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
 		err := s.Set(ctx, origTime, i, "new value with same modtime should be no-op")
 		require.NoError(t, err)
 	}
@@ -760,7 +760,7 @@ func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
 	assert.Equal(t, origHash, newHash, "re-set existing values with same modification time shouldn't change the bucket")
 
 	newTime := tm.next()
-	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
 		err := s.Set(ctx, newTime, i, "")
 		require.NoError(t, err)
 	}
@@ -788,7 +788,7 @@ func TestTombstoneVersusModTime(t *testing.T) {
 	require.NoError(t, err)
 	earlyTime := tm.next()
 	origTime := tm.next()
-	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
 		err := s.Tombstone(ctx, origTime, i)
 		require.NoError(t, err)
 	}
@@ -800,7 +800,7 @@ func TestTombstoneVersusModTime(t *testing.T) {
 	origHash := contentHash(s)
 
 	reopen(&s, c, cfg, tm.next())
-	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
 		err := s.Tombstone(ctx, origTime, i)
 		require.NoError(t, err)
 		err = s.RemoveTombstones(ctx, earlyTime)
@@ -814,7 +814,7 @@ func TestTombstoneVersusModTime(t *testing.T) {
 
 	reopen(&s, c, cfg, tm.next())
 	newTime := tm.next()
-	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
 		err := s.Tombstone(ctx, newTime, i)
 		require.NoError(t, err)
 		err = s.RemoveTombstones(ctx, earlyTime)
@@ -827,7 +827,7 @@ func TestTombstoneVersusModTime(t *testing.T) {
 	assert.Equal(t, origHash, newHash, "tombstone with later modification time should not result in new content")
 
 	reopen(&s, c, cfg, tm.next())
-	for i := uint(0); i < cfg.BranchFactor+1; i++ {
+	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
 		err := s.Tombstone(ctx, earlyTime, i)
 		require.NoError(t, err)
 		err = s.RemoveTombstones(ctx, earlyTime)
@@ -977,20 +977,24 @@ func TestStructKeysAndValues(t *testing.T) {
 	require.NoError(t, err)
 	merged, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
 	require.NoError(t, err)
-	var retrieved value
+	var retrieved = value{999, "gah"}
 	ok, err := merged.Get(ctx, updateThenDelete, &retrieved)
 	require.NoError(t, err)
-	require.False(t, ok, "tombstone always wins")
+	assert.False(t, ok, "tombstone always wins")
+	assert.Equal(t, value{999, "gah"}, retrieved, "get tombstone should preserve input")
 	ok, err = merged.Get(ctx, deleteThenUpdate, &retrieved)
-	require.NoError(t, err)
-	require.False(t, ok, "tombstone always wins")
+	assert.NoError(t, err)
+	assert.False(t, ok, "tombstone always wins")
+	assert.Equal(t, value{999, "gah"}, retrieved, "get tombstone should preserve input")
 	ok, err = merged.Get(ctx, updateOnly, &retrieved)
 	require.NoError(t, err)
-	require.True(t, ok)
-	require.Equal(t, add(origValue, 2), retrieved, "later value wins")
+	assert.True(t, ok)
+	assert.Equal(t, add(origValue, 2), retrieved, "later value wins")
+	retrieved = value{999, "gah"}
 	ok, err = merged.Get(ctx, deleteBeforeInsert, &retrieved)
 	require.NoError(t, err)
-	require.False(t, ok, "tombstone always wins")
+	assert.False(t, ok, "tombstone always wins")
+	assert.Equal(t, value{999, "gah"}, retrieved, "get tombstone should preserve input")
 }
 
 func TestTombstoneRemoval(t *testing.T) {
@@ -1181,16 +1185,16 @@ func TestConflictDetection(t *testing.T) {
 				return nil
 			},
 		}
-		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_happycase", &cfg, "key", 1)
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_happycase", &cfg, "key", "1")
 		defer closer()
 		sAddition1, err := s.Clone(ctx)
 		require.NoError(t, err)
-		require.NoError(t, sAddition1.Set(ctx, tm.next(), "key2", 1))
+		require.NoError(t, sAddition1.Set(ctx, tm.next(), "key2", "1"))
 		_, err = sAddition1.Commit(ctx)
 		require.NoError(t, err)
 		sAddition2, err := s.Clone(ctx)
 		require.NoError(t, err)
-		require.NoError(t, sAddition2.Set(ctx, tm.next(), "key2", 2))
+		require.NoError(t, sAddition2.Set(ctx, tm.next(), "key2", "2"))
 		_, err = sAddition2.Commit(ctx)
 		require.NoError(t, err)
 		reopen(&s, c, cfg, tm.next())
@@ -1215,17 +1219,17 @@ func TestConflictDetection(t *testing.T) {
 				return nil
 			},
 		}
-		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_addition", &cfg, "key", 1)
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_addition", &cfg, "key", "1")
 		defer closer()
 		sAddition1, err := s.Clone(ctx)
 		require.NoError(t, err)
 		at := tm.next()
-		require.NoError(t, sAddition1.Set(ctx, at, "key2", 1))
+		require.NoError(t, sAddition1.Set(ctx, at, "key2", "1"))
 		_, err = sAddition1.Commit(ctx)
 		require.NoError(t, err)
 		sAddition2, err := s.Clone(ctx)
 		require.NoError(t, err)
-		require.NoError(t, sAddition2.Set(ctx, at, "key3", 1))
+		require.NoError(t, sAddition2.Set(ctx, at, "key3", "1"))
 		_, err = sAddition2.Commit(ctx)
 		require.NoError(t, err)
 		reopen(&s, c, cfg, tm.next())
@@ -1244,7 +1248,7 @@ func TestConflictDetection(t *testing.T) {
 				return nil
 			},
 		}
-		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_idempotent_update", &cfg, "key", 1)
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_idempotent_update", &cfg, "key", "1")
 		defer closer()
 
 		sAddition1, err := s.Clone(ctx)
@@ -1252,10 +1256,10 @@ func TestConflictDetection(t *testing.T) {
 		sAddition2, err := s.Clone(ctx)
 		require.NoError(t, err)
 
-		require.NoError(t, sAddition1.Set(ctx, tm.next(), "key2", 1))
+		require.NoError(t, sAddition1.Set(ctx, tm.next(), "key2", "1"))
 		_, err = sAddition1.Commit(ctx)
 		require.NoError(t, err)
-		require.NoError(t, sAddition2.Set(ctx, tm.next(), "key2", 1))
+		require.NoError(t, sAddition2.Set(ctx, tm.next(), "key2", "1"))
 		_, err = sAddition2.Commit(ctx)
 		require.NoError(t, err)
 
@@ -1274,9 +1278,9 @@ func TestConflictDetection(t *testing.T) {
 				return nil
 			},
 		}
-		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_sametree", &cfg, "key", 1)
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_sametree", &cfg, "key", "1")
 		defer closer()
-		require.NoError(t, s.Set(ctx, tm.next(), "key", 2))
+		require.NoError(t, s.Set(ctx, tm.next(), "key", "2"))
 		require.Equal(t, 0, conflicts)
 		// not necessary to commit, but check anyway
 		reopen(&s, c, cfg, tm.next())
@@ -1294,11 +1298,11 @@ func TestConflictDetection(t *testing.T) {
 				return nil
 			},
 		}
-		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_tombstone", &cfg, "key", 1)
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_tombstone", &cfg, "key", "1")
 		defer closer()
 		sAddition1, err := s.Clone(ctx)
 		require.NoError(t, err)
-		require.NoError(t, sAddition1.Set(ctx, tm.next(), "key2", 1))
+		require.NoError(t, sAddition1.Set(ctx, tm.next(), "key2", "1"))
 		_, err = sAddition1.Commit(ctx)
 		require.NoError(t, err)
 		sTombstone, err := s.Clone(ctx)
@@ -1322,20 +1326,20 @@ func TestConflictDetection(t *testing.T) {
 				return errKO
 			},
 		}
-		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_errorstop", &cfg, "key", 1)
+		s, c, cfg, tm, closer := createTestTreeWithConfig("conflictDetection_errorstop", &cfg, "key", "1")
 		defer closer()
 		_, err := s.Commit(ctx)
 		require.NoError(t, err)
 		s1, err := s.Clone(ctx)
 		require.NoError(t, err)
-		require.NoError(t, s1.Set(ctx, tm.next(), "key2", 1))
-		require.NoError(t, s1.Set(ctx, tm.next(), "key3", 1))
+		require.NoError(t, s1.Set(ctx, tm.next(), "key2", "1"))
+		require.NoError(t, s1.Set(ctx, tm.next(), "key3", "1"))
 		_, err = s1.Commit(ctx)
 		require.NoError(t, err)
 		s2, err := s.Clone(ctx)
 		require.NoError(t, err)
-		require.NoError(t, s2.Set(ctx, tm.next(), "key2", 2))
-		require.NoError(t, s2.Set(ctx, tm.next(), "key3", 2))
+		require.NoError(t, s2.Set(ctx, tm.next(), "key2", "2"))
+		require.NoError(t, s2.Set(ctx, tm.next(), "key3", "2"))
 		_, err = s2.Commit(ctx)
 		require.NoError(t, err)
 		_, err = Open(ctx, c, cfg, OpenOptions{}, tm.next())

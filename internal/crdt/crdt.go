@@ -172,14 +172,18 @@ func unmarshal(bytes []byte, i interface{}, cfg Config) error {
 	if ucb == nil {
 		ucb = json.Unmarshal
 	}
+	if cfg.UnmarshalerUsesRegisteredTypes {
+		return cfg.Unmarshal(bytes, i)
+	}
 	cv, ok := i.(*Value)
 	if !ok {
 		return ucb(bytes, i)
 	}
 	var jv struct {
 		ModEpochNanos            int64           `json:"m"`
-		TombstoneSinceEpochNanos int64           `json:"t,omitempty"`
+		TombstoneSinceEpochNanos int64           `json:"d,omitempty"`
 		Value                    json.RawMessage `json:"v,omitempty"`
+		PreviousRoot             string          `json:"p,omitempty"`
 	}
 	err := ucb(bytes, &jv)
 	if err != nil {
@@ -200,10 +204,14 @@ func unmarshal(bytes []byte, i interface{}, cfg Config) error {
 
 	cv.ModEpochNanos = jv.ModEpochNanos
 	cv.TombstoneSinceEpochNanos = jv.TombstoneSinceEpochNanos
+	cv.PreviousRoot = jv.PreviousRoot
 	return nil
 }
 
 func Load(ctx context.Context, cfg Config, rootName *string, root Root) (*Tree, error) {
+	if !cfg.UnmarshalerUsesRegisteredTypes && cfg.ValuesLike == nil {
+		return nil, errors.New("must set cfg.{Keys,Values}Like or use a marshaler which registers types")
+	}
 	mastCfg := mast.RemoteConfig{
 		KeysLike: cfg.KeysLike,
 		ValuesLike: Value{
