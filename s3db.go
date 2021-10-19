@@ -375,7 +375,7 @@ func (s *DB) Commit(ctx context.Context) (*string, error) {
 		return nil, fmt.Errorf("store: %w", err)
 	}
 	s.moveMergedRoots(ctx, name, s.mergedRoots)
-	s.mergedRoots = map[string][]byte{}
+	s.mergedRoots = map[string][]byte{name: rootBytes}
 	s.crdt.MergeSources = []string{name}
 	s.crdt.Source = &name
 	s.tombstoned = false

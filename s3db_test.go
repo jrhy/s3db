@@ -1348,3 +1348,40 @@ func TestConflictDetection(t *testing.T) {
 	})
 
 }
+
+func TestLinearCommitsMovePreviousVersions(t *testing.T) {
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
+
+	t.Run("HappyCase", func(t *testing.T) {
+		s, _, _, tm, closer := createTestTreeWithConfig("linear1", nil, "key", "1")
+		defer closer()
+		_, err := s.Commit(ctx)
+		require.NoError(t, err)
+		require.NoError(t, s.Set(ctx, tm.next(), "key2", "1"))
+		_, err = s.Commit(ctx)
+		require.NoError(t, err)
+		roots, err := s.listRoots(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(roots), "previous root should be considered merged")
+	})
+
+	t.Run("WithClones", func(t *testing.T) {
+		s, _, _, tm, closer := createTestTreeWithConfig("linear_with_clones", nil, "key", "1")
+		defer closer()
+		_, err := s.Commit(ctx)
+		require.NoError(t, err)
+		s, err = s.Clone(ctx)
+		require.NoError(t, err)
+		require.NoError(t, s.Set(ctx, tm.next(), "key2", "1"))
+		_, err = s.Commit(ctx)
+		require.NoError(t, err)
+		s, err = s.Clone(ctx)
+		require.NoError(t, err)
+		roots, err := s.listRoots(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(roots), "previous root should be considered merged")
+	})
+
+}
