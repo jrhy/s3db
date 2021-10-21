@@ -45,7 +45,7 @@ func setupS3(bucketName string) (*aws.Config, func()) {
 	return s3cfg, closer
 }
 
-func ExampleOpen() {
+func Example() {
 	ctx := context.Background()
 	s3cfg, close := setupS3("bucket")
 	defer close()
@@ -65,15 +65,31 @@ func ExampleOpen() {
 	if err != nil {
 		panic(err)
 	}
+
+	// setting a value
 	err = s.Set(ctx, time.Now(), "hello", 5)
 	if err != nil {
 		panic(err)
 	}
+
+	// getting a value
+	var v int
+	ok, err := s.Get(ctx, "hello", &v)
+	if err != nil {
+		panic(err)
+	}
+	if !ok {
+		panic("how is that not OK?")
+	}
+	fmt.Printf("hello=%d\n", v)
+
 	_, err = s.Commit(ctx)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("%d\n", s.Size())
+
+	fmt.Printf("size %d\n", s.Size())
 	// Output:
-	// 1
+	// hello=5
+	// size 1
 }

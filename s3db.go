@@ -1,3 +1,40 @@
+// Package s3db turns your S3 bucket into a serverless database and lets you diff versions to track changes. 🤯
+//
+// s3db is an opinionated modern serverless datastore built on diffing
+// that integrates streaming, reduces dependencies and makes it natural
+// to write distributed systems with fewer idempotency bugs.
+//
+// s3db makes it easy to put and get structured data in S3 from Go, and
+// track changes.
+//
+// s3db doesn't depend on any services other than S3-compatible storage.
+//
+// s3db is on a mission to make it easier to build applications that can
+// take advantage of the high availability and durability of object
+// storage, while also being predictable and resilient in the face of failures,
+// by leveraging immutable data and CRDTs to get the best from local-first
+// and shared-nothing architectures.
+//
+//
+// Requirements
+//
+// - go1.14+
+//
+// - S3-compatible storage, like minio, Wasabi, or AWS
+//
+//
+// Disambiguation
+//
+// This s3db isn't related to the Simple Sloppy Semantic Database
+// (https://en.wikipedia.org/wiki/Simple_Sloppy_Semantic_Database) that
+// predates Amazon S3.
+//
+//
+// Links
+//
+// * Merkle Search Tree, https://github.com/jrhy/mast
+//
+//
 package s3db
 
 import (
