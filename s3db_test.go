@@ -596,6 +596,7 @@ func (s *countyS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInpu
 	s.l.Lock()
 	s.putAttemptCount++
 	defer s.l.Unlock()
+	//fmt.Printf("PUT %s\n", *input.Key)
 	return s.S3.PutObjectWithContext(ctx, input, opts...)
 }
 
@@ -908,7 +909,9 @@ func createTestTreeWithConfig(name string, baseCfg *Config, key, value interface
 	cfg.Storage = &S3BucketInfo{c.Endpoint, bucketName, name}
 	cfg.KeysLike = key
 	cfg.ValuesLike = value
-	cfg.BranchFactor = 4
+	if cfg.BranchFactor == 0 {
+		cfg.BranchFactor = 4
+	}
 	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
 	if err != nil {
 		panic(err)
@@ -1349,7 +1352,7 @@ func TestConflictDetection(t *testing.T) {
 
 }
 
-func TestLinearCommitsMovePreviousVersions(t *testing.T) {
+func TestLinearCommitsMergePreviousVersions(t *testing.T) {
 	if s3test.CanParallelize() {
 		t.Parallel()
 	}
@@ -1384,4 +1387,57 @@ func TestLinearCommitsMovePreviousVersions(t *testing.T) {
 		require.Equal(t, 1, len(roots), "previous root should be considered merged")
 	})
 
+}
+
+func TestNodeCacheFiltersNodesCommittedByPeers(t *testing.T) {
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
+
+	const bf = 4
+
+	tm := newTestTime()
+	realC, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg := Config{
+		Storage:      &S3BucketInfo{realC.Endpoint, bucketName, "commitClonedBlocks"},
+		KeysLike:     0,
+		ValuesLike:   0,
+		BranchFactor: bf,
+		// turn on node caching
+		NodeCache: mast.NewNodeCache(10),
+	}
+	c := &countyS3{S3: *realC}
+	s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+
+	// v1: populate a single node
+	for i := 0; i < bf; i++ {
+		require.NoError(t, s.Set(ctx, tm.next(), i, i))
+	}
+
+	// v2: clone v1 before committed
+	v2, err := s.Clone(ctx)
+	require.NoError(t, err)
+
+	// v2: grow the tree, preserving the existing node
+	require.Equal(t, 0, v2.Height())
+	require.NoError(t, v2.Set(ctx, tm.next(), bf, bf))
+	require.Equal(t, 1, v2.Height())
+
+	// v1: store the node
+	_, err = s.Commit(ctx)
+	require.NoError(t, err)
+	nodes, err := s.listNodes(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(nodes), "v1 is a single node")
+
+	// v2: commit, which should only write the new root, ignoring the preserved node
+	c.putAttemptCount = 0
+	_, err = v2.Commit(ctx)
+	require.NoError(t, err)
+	nodes, err = v2.listNodes(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(nodes), "v2 grows the tree preserving the existing node")
+	require.Equal(t, 2, c.putAttemptCount, "caching should have prevented redundant store of node from v1")
 }
