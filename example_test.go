@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/johannesboyne/gofakes3"
 	"github.com/johannesboyne/gofakes3/backend/s3mem"
+	"github.com/jrhy/mast"
 	"github.com/jrhy/s3db"
 )
 
@@ -58,8 +59,10 @@ func Example() {
 			BucketName:  "bucket",
 			Prefix:      "/my-awesome-database",
 		},
-		KeysLike:   "key",
-		ValuesLike: 1234,
+		KeysLike:      "key",
+		ValuesLike:    1234,
+		NodeCache:     mast.NewNodeCache(1024),
+		NodeEncryptor: s3db.V1NodeEncryptor([]byte("This is a secret passphrase if ever there was one.")),
 	}
 	s, err := s3db.Open(ctx, c, cfg, s3db.OpenOptions{}, time.Now())
 	if err != nil {
