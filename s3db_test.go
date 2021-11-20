@@ -841,14 +841,14 @@ func TestTombstoneVersusModTime(t *testing.T) {
 	assert.NotEqual(t, origHash, newHash, "tombstone with earlier modification time should result in new content")
 }
 
-// type dbgS3 struct {
-// S3Interface
-// }
+type dbgS3 struct {
+	S3Interface
+}
 
-// func (s *dbgS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInput, opts ...request.Option) (*s3.PutObjectOutput, error) {
-// fmt.Printf("PUT %s...\n", *input.Key)
-// return s.S3Interface.PutObjectWithContext(ctx, input, opts...)
-// }
+func (s *dbgS3) PutObjectWithContext(ctx aws.Context, input *s3.PutObjectInput, opts ...request.Option) (*s3.PutObjectOutput, error) {
+	fmt.Printf("PUT %s...\n", *input.Key)
+	return s.S3Interface.PutObjectWithContext(ctx, input, opts...)
+}
 
 func TestUpdateVsDeleteConflict(t *testing.T) {
 	if s3test.CanParallelize() {
@@ -1440,4 +1440,40 @@ func TestNodeCacheFiltersNodesCommittedByPeers(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, len(nodes), "v2 grows the tree preserving the existing node")
 	require.Equal(t, 2, c.putAttemptCount, "caching should have prevented redundant store of node from v1")
+}
+
+func TestUnmergeableBranchFactor(t *testing.T) {
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
+
+	tm := newTestTime()
+	c, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg1 := Config{
+		Storage:      &S3BucketInfo{c.Endpoint, bucketName, "unmergeable"},
+		KeysLike:     0,
+		ValuesLike:   0,
+		BranchFactor: 16,
+	}
+	s1, err := Open(ctx, c, cfg1, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+
+	cfg2 := cfg1
+	cfg2.BranchFactor = 4
+
+	s2, err := Open(ctx, c, cfg2, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+
+	err = s1.Set(ctx, time.Now(), 1, 1)
+	require.NoError(t, err)
+	err = s2.Set(ctx, time.Now(), 2, 2)
+	require.NoError(t, err)
+	_, err = s1.Commit(ctx)
+	require.NoError(t, err)
+	_, err = s2.Commit(ctx)
+	require.NoError(t, err)
+
+	_, err = Open(ctx, c, cfg2, OpenOptions{}, tm.next())
+	require.Contains(t, err.Error(), "varying branch factors")
 }

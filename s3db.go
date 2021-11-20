@@ -332,6 +332,13 @@ func mergeRoots(
 			tree.Source = nil
 			tree.MergeSources = []string{key}
 		} else {
+			if tree.Mast.BranchFactor() != graft.Mast.BranchFactor() {
+				return nil, nil, 0, fmt.Errorf(
+					"cannot merge roots with varying branch factors, %d and %d",
+					tree.Mast.BranchFactor(),
+					graft.Mast.BranchFactor())
+			}
+
 			newTree, err := tree.Clone(ctx)
 			if err != nil {
 				// log.info...
@@ -884,4 +891,8 @@ func (r *dbAndCutoff) root() string {
 		return ""
 	}
 	return *r.db.crdt.Source
+}
+
+func (d *DB) BranchFactor() uint {
+	return d.crdt.Mast.BranchFactor()
 }
