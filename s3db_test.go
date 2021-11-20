@@ -1476,4 +1476,19 @@ func TestUnmergeableBranchFactor(t *testing.T) {
 
 	_, err = Open(ctx, c, cfg2, OpenOptions{}, tm.next())
 	require.Contains(t, err.Error(), "varying branch factors")
+	require.Contains(t, err.Error(), "without OpenOptions.ForceRebranch")
+
+	cfg3 := cfg1
+	cfg3.BranchFactor = 9
+	merged, err := Open(ctx, c, cfg3, OpenOptions{ForceRebranch: true}, tm.next())
+	require.NoError(t, err)
+	require.Equal(t, uint(9), merged.BranchFactor())
+	var v int
+	_, err = merged.Get(ctx, 1, &v)
+	require.NoError(t, err)
+	require.Equal(t, 1, v)
+	_, err = merged.Get(ctx, 2, &v)
+	require.NoError(t, err)
+	require.Equal(t, 2, v)
+	require.Equal(t, uint64(2), merged.Size())
 }

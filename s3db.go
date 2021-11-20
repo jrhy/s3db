@@ -134,6 +134,8 @@ type OpenOptions struct {
 	ReadOnly bool
 	// SingleVersion is used to open a historic version
 	SingleVersion string
+	// ForceRebranch is used to change the branch factor of an existing tree, rewriting nodes and roots if necessary
+	ForceRebranch bool
 }
 
 // S3Interface is the subset of the AWS SDK for S3 that s3db uses to access compatible buckets
@@ -200,7 +202,7 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 		}
 	} else {
 		var err error
-		tree, mergedRoots, unmergeableRoots, err = mergeRoots(ctx, S3, cfg, crdtConfig, rootPersist, when)
+		tree, mergedRoots, unmergeableRoots, err = mergeRoots(ctx, S3, cfg, crdtConfig, rootPersist, when, opts.ForceRebranch)
 		if err != nil {
 			return nil, fmt.Errorf("merge: %w", err)
 		}
@@ -293,6 +295,7 @@ func mergeRoots(
 	crdtConfig crdt.Config,
 	rootPersist *s3Persist.Persist,
 	when time.Time,
+	forceRebranch bool,
 ) (*crdt.Tree, map[string][]byte, int, error) {
 	roots, err := listObjects(ctx, S3, rootPersist.BucketName, rootPersist.Prefix)
 	if err != nil {
@@ -327,16 +330,22 @@ func mergeRoots(
 			}
 			return nil, nil, 0, err
 		}
-		if tree == nil {
+		if tree == nil && (!forceRebranch || cfg.BranchFactor == graft.Mast.BranchFactor()) {
 			tree = graft
 			tree.Source = nil
 			tree.MergeSources = []string{key}
 		} else {
-			if tree.Mast.BranchFactor() != graft.Mast.BranchFactor() {
+			if !forceRebranch && tree.Mast.BranchFactor() != graft.Mast.BranchFactor() {
 				return nil, nil, 0, fmt.Errorf(
-					"cannot merge roots with varying branch factors, %d and %d",
+					"cannot merge roots with varying branch factors, %d and %d, without OpenOptions.ForceRebranch",
 					tree.Mast.BranchFactor(),
 					graft.Mast.BranchFactor())
+			}
+			if tree == nil {
+				tree, err = crdt.Load(ctx, crdtConfig, nil, emptyRoot(when, cfg.BranchFactor, crdtConfig))
+				if err != nil {
+					return nil, nil, 0, fmt.Errorf("new root: %w", err)
+				}
 			}
 
 			newTree, err := tree.Clone(ctx)
@@ -360,13 +369,7 @@ func mergeRoots(
 	unmergedRoots := len(roots) - len(mergedRoots)
 
 	if tree == nil {
-		empty := crdt.NewRoot(when, cfg.BranchFactor)
-		if crdtConfig.CustomMergeFunc != nil {
-			empty.MergeMode = crdt.MergeModeCustom
-		} else if crdtConfig.OnConflictMerged != nil {
-			empty.MergeMode = crdt.MergeModeCustomLWW
-		}
-		tree, err = crdt.Load(ctx, crdtConfig, nil, empty)
+		tree, err = crdt.Load(ctx, crdtConfig, nil, emptyRoot(when, cfg.BranchFactor, crdtConfig))
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("new root: %w", err)
 		}
@@ -378,6 +381,16 @@ func mergeRoots(
 	}
 
 	return tree, mergedRoots, unmergedRoots, nil
+}
+
+func emptyRoot(when time.Time, branchFactor uint, crdtConfig crdt.Config) crdt.Root {
+	empty := crdt.NewRoot(when, branchFactor)
+	if crdtConfig.CustomMergeFunc != nil {
+		empty.MergeMode = crdt.MergeModeCustom
+	} else if crdtConfig.OnConflictMerged != nil {
+		empty.MergeMode = crdt.MergeModeCustomLWW
+	}
+	return empty
 }
 
 func loadRoot(ctx context.Context, persist mast.Persist, key string) (*crdt.Root, []byte, error) {
