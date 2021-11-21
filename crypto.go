@@ -109,6 +109,7 @@ func crypto_secretbox_open_easy(c []byte, n []byte, k *[32]byte) ([]byte, error)
 	return m, nil
 }
 
+// TODO: switch to golang.org/x/crypto/nacl/secretbox since it exists
 func crypto_secretbox_easy(m []byte, n []byte, k *[32]byte) ([]byte, error) {
 	c := make([]byte, len(m)+macLen)
 	err := crypto_secretbox_detached(c[16:], c[0:16], m, n, k)
@@ -174,7 +175,7 @@ func deriveKey(master, context []byte) []byte {
 	combined = append(combined, context...)
 	combined = append(combined, master...)
 	salt, _ := nonce(combined, deriveKeySaltLen)
-	// for compatibility with libsodium-based impls in which pwhash requires NUL-terminated source
+	// base64-encode passphrase for compatibility with libsodium-based impls in which pwhash requires NUL-terminated source
 	return argon2.IDKey([]byte(base64.StdEncoding.EncodeToString(combined)),
 		salt, 1, 8, 1, keyLen)
 }
