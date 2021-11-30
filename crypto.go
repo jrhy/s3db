@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/blake2b"
+	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/crypto/poly1305"
 	"golang.org/x/crypto/salsa20"
 	"golang.org/x/crypto/salsa20/salsa"
@@ -30,20 +31,23 @@ func encrypt(key *[32]byte, message []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := crypto_secretbox_easy(message, n, key)
-	if err != nil {
-		return nil, err
-	}
-	return append(n, c...), nil
+	var nonce [encryptNonceLen]byte
+	copy(nonce[:], n[:encryptNonceLen])
+	c := secretbox.Seal(nil, message, &nonce, key)
+	return append(nonce[:], c...), nil
 }
 
 func decrypt(key *[32]byte, c []byte) ([]byte, error) {
 	if len(c) < encryptNonceLen {
 		return nil, fmt.Errorf("message too short, no nonce")
 	}
-	m, err := crypto_secretbox_open_easy(c[24:], c[0:24], key)
-	if err != nil {
-		return nil, err
+
+	var nonce [encryptNonceLen]byte
+	copy(nonce[:], c[:encryptNonceLen])
+	m, ok := secretbox.Open(nil, c[encryptNonceLen:], &nonce, key)
+	if !ok {
+		// fallback to the old implementation
+		return crypto_secretbox_open_easy(c[24:], c[0:24], key)
 	}
 	return m, nil
 }
@@ -60,6 +64,9 @@ func nonce(message []byte, nonce_len int) ([]byte, error) {
 	return hasher.Sum(nil), nil
 }
 
+// XXX: This DIY version has some discrepancy with the last 8 bytes of the
+// nonce, compared to libsodium, and is only provided for compatibility
+// decrypting existing data.
 func crypto_secretbox_open_detached(
 	m []byte,
 	c []byte,
@@ -97,6 +104,9 @@ func crypto_secretbox_open_detached(
 	return nil
 }
 
+// XXX: This DIY version has some discrepancy with the last 8 bytes of the
+// nonce, compared to libsodium, and is only provided for compatibility
+// decrypting existing data.
 func crypto_secretbox_open_easy(c []byte, n []byte, k *[32]byte) ([]byte, error) {
 	if len(c) < macLen {
 		return nil, fmt.Errorf("too short for MAC")
@@ -109,7 +119,9 @@ func crypto_secretbox_open_easy(c []byte, n []byte, k *[32]byte) ([]byte, error)
 	return m, nil
 }
 
-// TODO: switch to golang.org/x/crypto/nacl/secretbox since it exists
+// XXX: Use secretbox package instead. This DIY version has some discrepancy
+// with the last 8 bytes of the nonce, compared to libsodium, and should not be
+// used.
 func crypto_secretbox_easy(m []byte, n []byte, k *[32]byte) ([]byte, error) {
 	c := make([]byte, len(m)+macLen)
 	err := crypto_secretbox_detached(c[16:], c[0:16], m, n, k)
@@ -119,6 +131,9 @@ func crypto_secretbox_easy(m []byte, n []byte, k *[32]byte) ([]byte, error) {
 	return c, nil
 }
 
+// XXX: Use secretbox package instead. This DIY version has some discrepancy
+// with the last 8 bytes of the nonce, compared to libsodium, and should not be
+// used.
 func crypto_secretbox_detached(c []byte, mac []byte, m []byte, n []byte,
 	k *[32]byte) error {
 	var subkey [32]byte
