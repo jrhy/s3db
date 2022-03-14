@@ -1,6 +1,6 @@
 github.com/aws/aws-sdk-go v1.17.4/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN924inxo=
-github.com/aws/aws-sdk-go v1.43.8 h1:8a/M9C4l5CxFNM6IuNx4F1p+ITJEX12VxWxUQo61cbc=
-github.com/aws/aws-sdk-go v1.43.8/go.mod h1:y4AeaBuwd2Lk+GepC1E9v0qOiTws0MIWAX4oIKwKHZo=
+github.com/aws/aws-sdk-go v1.43.18 h1:nwLaIz2m1f7YBEMNyEc6bBB276AIEaGaIQrc2G9h4zY=
+github.com/aws/aws-sdk-go v1.43.18/go.mod h1:y4AeaBuwd2Lk+GepC1E9v0qOiTws0MIWAX4oIKwKHZo=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -16,8 +16,8 @@ github.com/jmespath/go-jmespath/internal/testify v1.5.1 h1:shLQSRRSCCPj3f2gpwzGw
 github.com/jmespath/go-jmespath/internal/testify v1.5.1/go.mod h1:L3OGu8Wl2/fWfCI6z80xFu9LTZmf1ZRjMHUOPmWr69U=
 github.com/johannesboyne/gofakes3 v0.0.0-20210819161434-5c8dfcfe5310 h1:CwSccv4SFVzhShEoWx3W4dyiWHwvLEL3lJbw+YIrQYg=
 github.com/johannesboyne/gofakes3 v0.0.0-20210819161434-5c8dfcfe5310/go.mod h1:LIAXxPvcUXwOcTIj9LSNSUpE9/eMHalTWxsP/kmWxQI=
-github.com/jrhy/mast v1.2.6-0.20220301055100-4c7e32588d3d h1:LTk45pv1olBCEIsDmagu2sEMMmtN5pAmWOJFthbppTs=
-github.com/jrhy/mast v1.2.6-0.20220301055100-4c7e32588d3d/go.mod h1:QEfM3k7yHtf3ahKnc9V0r+HJP0CO3Adv09VLGg9N+wk=
+github.com/jrhy/mast v1.2.6-0.20220314220120-b5d34d4b3d9a h1:zozMMsDeTLqWc9X8PTWDiJ+U/yAON2mKU63SNuGu0X0=
+github.com/jrhy/mast v1.2.6-0.20220314220120-b5d34d4b3d9a/go.mod h1:csvclMrHUKEpiCb8eiVwyFkzk34S17nIpnGxPuU2hJo=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
