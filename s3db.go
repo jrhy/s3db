@@ -15,26 +15,21 @@
 // by leveraging immutable data and CRDTs to get the best from local-first
 // and shared-nothing architectures.
 //
-//
-// Requirements
+// # Requirements
 //
 // - go1.14+
 //
 // - S3-compatible storage, like minio, Wasabi, or AWS
 //
-//
-// Disambiguation
+// # Disambiguation
 //
 // This s3db isn't related to the Simple Sloppy Semantic Database
 // (https://en.wikipedia.org/wiki/Simple_Sloppy_Semantic_Database) that
 // predates Amazon S3.
 //
-//
-// Links
+// # Links
 //
 // * Merkle Search Tree, https://github.com/jrhy/mast
-//
-//
 package s3db
 
 import (
@@ -105,6 +100,8 @@ type Config struct {
 	// different values in different trees that are being merged. It can be used to detect
 	// when a uniqueness constraint has been broken and which keys need fixing.
 	OnConflictMerged
+	// LogFunc is a callback that will be invoked to provide details on potential corruption.
+	LogFunc func(string)
 }
 
 // OnConflictMerged is a callback that will be invoked whenever entries for a key have
@@ -316,7 +313,9 @@ func mergeRoots(
 		if err != nil {
 			var ae awserr.Error
 			if errors.As(err, &ae) && ae.Code() == s3.ErrCodeNoSuchKey {
-				// TODO: log
+				if cfg.LogFunc != nil {
+					cfg.LogFunc(fmt.Sprintf("skipping merge for deleted root %v: %v", key, err))
+				}
 				continue
 			}
 			return nil, nil, 0, err
@@ -325,7 +324,10 @@ func mergeRoots(
 		if err != nil {
 			var ae awserr.Error
 			if errors.As(err, &ae) && ae.Code() == s3.ErrCodeNoSuchKey {
-				// TODO: log
+				// TODO: log via callback instead
+				if cfg.LogFunc != nil {
+					cfg.LogFunc(fmt.Sprintf("skipping merge for deleted root %v: %v", key, err))
+				}
 				continue
 			}
 			return nil, nil, 0, err
@@ -350,7 +352,9 @@ func mergeRoots(
 
 			newTree, err := tree.Clone(ctx)
 			if err != nil {
-				// log.info...
+				if cfg.LogFunc != nil {
+					cfg.LogFunc(fmt.Sprintf("skipping merge un-cloneable tree %v: %v", key, err))
+				}
 				continue
 			}
 			err = newTree.Merge(ctx, graft)
@@ -358,7 +362,9 @@ func mergeRoots(
 				return nil, nil, 0, err
 			}
 			if err != nil {
-				// log.info...
+				if cfg.LogFunc != nil {
+					cfg.LogFunc(fmt.Sprintf("skipping merge un-cloneable tree %v: %v", key, err))
+				}
 				continue
 			}
 			tree = newTree
