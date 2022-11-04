@@ -102,6 +102,8 @@ type Config struct {
 	OnConflictMerged
 	// LogFunc is a callback that will be invoked to provide details on potential corruption.
 	LogFunc func(string)
+
+	XXXCustomMergeValueOnly func(key, v1, v2 interface{}) interface{}
 }
 
 // OnConflictMerged is a callback that will be invoked whenever entries for a key have
@@ -184,6 +186,9 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 		Marshal:                        marshalGob,
 		Unmarshal:                      unmarshalGob,
 		UnmarshalerUsesRegisteredTypes: true,
+	}
+	if cfg.XXXCustomMergeValueOnly != nil {
+		crdtConfig.CustomMergeValueOnly = cfg.XXXCustomMergeValueOnly
 	}
 	if cfg.OnConflictMerged != nil {
 		crdtConfig.OnConflictMerged = crdt.OnConflictMerged(cfg.OnConflictMerged)
@@ -391,7 +396,7 @@ func mergeRoots(
 
 func emptyRoot(when time.Time, branchFactor uint, crdtConfig crdt.Config) crdt.Root {
 	empty := crdt.NewRoot(when, branchFactor)
-	if crdtConfig.CustomMergeFunc != nil {
+	if crdtConfig.CustomMergeValueOnly != nil {
 		empty.MergeMode = crdt.MergeModeCustom
 	} else if crdtConfig.OnConflictMerged != nil {
 		empty.MergeMode = crdt.MergeModeCustomLWW

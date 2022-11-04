@@ -143,7 +143,7 @@ type Config struct {
 	Marshal                        func(interface{}) ([]byte, error)
 	Unmarshal                      func([]byte, interface{}) error
 	UnmarshalerUsesRegisteredTypes bool
-	CustomMergeFunc                MergeFunc
+	CustomMergeValueOnly           func(key, v1, v2 interface{}) interface{}
 	OnConflictMerged
 }
 
@@ -231,15 +231,15 @@ func Load(ctx context.Context, cfg Config, rootName *string, root Root) (*Tree, 
 	}
 	switch root.MergeMode {
 	case MergeModeLWW:
-		if cfg.CustomMergeFunc != nil {
-			return nil, errors.New("config.CustomMergeFunc conflicts with MergeModeLWW")
+		if cfg.CustomMergeValueOnly != nil {
+			return nil, errors.New("config.CustomMergeValueOnly conflicts with MergeModeLWW")
 		}
 		if cfg.OnConflictMerged != nil {
 			return nil, errors.New("config.OnConflictMerged handler conflicts with MergeModeLWW")
 		}
 	case MergeModeCustom:
-		if cfg.CustomMergeFunc == nil {
-			return nil, errors.New("MergeModeCustom requires config.CustomMergeFunc")
+		if cfg.CustomMergeValueOnly == nil {
+			return nil, errors.New("MergeModeCustom requires config.CustomMergeValueOnly")
 		}
 		if cfg.OnConflictMerged != nil {
 			return nil, errors.New("config.OnConflictMerged handler conflicts with MergeModeCustom")
@@ -248,8 +248,8 @@ func Load(ctx context.Context, cfg Config, rootName *string, root Root) (*Tree, 
 		if cfg.OnConflictMerged == nil {
 			return nil, errors.New("MergeModeCustomLWW requires config.OnConflictMerged")
 		}
-		if cfg.CustomMergeFunc != nil {
-			return nil, errors.New("config.CustomMergeFunc handler conflicts with MergeModeCustomLWW")
+		if cfg.CustomMergeValueOnly != nil {
+			return nil, errors.New("config.CustomMergeValueOnly handler conflicts with MergeModeCustomLWW")
 		}
 	}
 	return &Tree{
@@ -276,13 +276,47 @@ func (c *Tree) MakeRoot(ctx context.Context) (*Root, error) {
 	return &crdtRoot, nil
 }
 
+func convertMergeFunc(cb func(key, v1, v2 interface{}) interface{}) MergeFunc {
+	return MergeFunc(func(ctx context.Context, newTree *mast.Mast, /*, conflicts *uint64*/
+		added, removed bool, key, addedValue, removedValue interface{},
+		onConflictMerged OnConflictMerged) (bool, error) {
+		var newValue Value
+		if !added && !removed { // changed
+			av := addedValue.(Value)
+			rv := removedValue.(Value)
+			newValue = av
+			newValue.Value = cb(key, av.Value, rv.Value)
+			if onConflictMerged != nil && !av.tombstoned() && !rv.tombstoned() &&
+				!reflect.DeepEqual(av.Value, rv.Value) {
+				err := onConflictMerged(key, av.Value, rv.Value)
+				if err != nil {
+					return false, fmt.Errorf("OnConflictMerged: %w", err)
+				}
+			}
+		} else if added {
+			// already present
+			return true, nil
+		} else if removed {
+			newValue = removedValue.(Value)
+		} else {
+			return false, fmt.Errorf("no added/removed value")
+		}
+		err := newTree.Insert(ctx, key, newValue)
+		if err != nil {
+			return false, fmt.Errorf("insert: %w", err)
+		}
+		return true, nil
+	})
+
+}
+
 func (c *Tree) Merge(ctx context.Context, other *Tree) error {
 	if c.MergeMode != other.MergeMode {
 		return fmt.Errorf("incoming graft has different MergeMode %d than local %d", other.MergeMode, c.MergeMode)
 	}
 	var mergeFunc MergeFunc
 	if c.MergeMode == MergeModeCustom {
-		mergeFunc = c.Config.CustomMergeFunc
+		mergeFunc = convertMergeFunc(c.Config.CustomMergeValueOnly)
 	} else {
 		mergeFunc = LWW
 	}
