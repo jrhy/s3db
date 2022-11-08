@@ -1492,3 +1492,32 @@ func TestUnmergeableBranchFactor(t *testing.T) {
 	require.Equal(t, 2, v)
 	require.Equal(t, uint64(2), merged.Size())
 }
+
+func TestCursor(t *testing.T) {
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
+	s, _, _, _, closer := createTestTree("cursor",
+		"a", 1,
+		"b", 2)
+	defer closer()
+	_, err := s.Commit(ctx)
+	require.NoError(t, err)
+	cursor, err := s.Cursor(ctx)
+	require.NoError(t, err)
+	require.NoError(t, cursor.Min(ctx))
+	k, v, ok := cursor.Get()
+	require.True(t, ok)
+	require.Equal(t, "a", k)
+	require.Equal(t, 1, v)
+	require.NoError(t, cursor.Forward(ctx))
+	k, v, ok = cursor.Get()
+	require.True(t, ok)
+	require.Equal(t, "b", k)
+	require.Equal(t, 2, v)
+	require.NoError(t, cursor.Forward(ctx))
+	k, v, ok = cursor.Get()
+	require.False(t, ok)
+	require.Nil(t, k)
+	require.Nil(t, v)
+}

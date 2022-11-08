@@ -915,3 +915,27 @@ func (r *dbAndCutoff) root() string {
 func (d *DB) BranchFactor() uint {
 	return d.crdt.Mast.BranchFactor()
 }
+
+type Cursor struct {
+	*mast.Cursor
+}
+
+func (d *DB) Cursor(ctx context.Context) (*Cursor, error) {
+	inner, err := d.crdt.Mast.Cursor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &Cursor{
+		Cursor: inner,
+	}, nil
+}
+
+// Get overrides mast.Cursor.Get() to unwrap the crdt.Value.
+func (c *Cursor) Get() (interface{}, interface{}, bool) {
+	innerKey, innerValue, ok := c.Cursor.Get()
+	if !ok {
+		return nil, nil, ok
+	}
+	innerValue = innerValue.(crdt.Value).Value
+	return innerKey, innerValue, true
+}
