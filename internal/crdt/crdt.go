@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jrhy/mast"
+	"github.com/jrhy/s3db/crdt"
 )
 
 type Tree struct {
@@ -34,13 +35,6 @@ const (
 	MergeModeCustom
 	MergeModeCustomLWW
 )
-
-type Value struct {
-	ModEpochNanos            int64       `json:"m"`
-	PreviousRoot             string      `json:"p,omitempty"`
-	TombstoneSinceEpochNanos int64       `json:"d,omitempty"`
-	Value                    interface{} `json:"v"`
-}
 
 func mergeTrees(ctx context.Context, mergeFunc MergeFunc, conflictCB OnConflictMerged, primary *mast.Mast, grafts ...*mast.Mast) (*mast.Mast, error) {
 	if len(grafts) == 0 {
@@ -81,12 +75,12 @@ var LWW MergeFunc = MergeFunc(
 	func(ctx context.Context, newTree *mast.Mast, /*, conflicts *uint64*/
 		added, removed bool, key, addedValue, removedValue interface{},
 		onConflictMerged OnConflictMerged) (bool, error) {
-		var newValue Value
+		var newValue crdt.Value
 		if !added && !removed { // changed
-			av := addedValue.(Value)
-			rv := removedValue.(Value)
+			av := addedValue.(crdt.Value)
+			rv := removedValue.(crdt.Value)
 			newValue = *LastWriteWins(&av, &rv)
-			if onConflictMerged != nil && !av.tombstoned() && !rv.tombstoned() &&
+			if onConflictMerged != nil && !av.Tombstoned() && !rv.Tombstoned() &&
 				!reflect.DeepEqual(av.Value, rv.Value) {
 				err := onConflictMerged(key, av.Value, rv.Value)
 				if err != nil {
@@ -97,7 +91,7 @@ var LWW MergeFunc = MergeFunc(
 			// already present
 			return true, nil
 		} else if removed {
-			newValue = removedValue.(Value)
+			newValue = removedValue.(crdt.Value)
 		} else {
 			return false, fmt.Errorf("no added/removed value")
 		}
@@ -108,8 +102,8 @@ var LWW MergeFunc = MergeFunc(
 		return true, nil
 	})
 
-func LastWriteWins(newValue, oldValue *Value) *Value {
-	if newValue.tombstoned() || oldValue.tombstoned() {
+func LastWriteWins(newValue, oldValue *crdt.Value) *crdt.Value {
+	if newValue.Tombstoned() || oldValue.Tombstoned() {
 		return firstTombstoneWins(newValue, oldValue)
 	}
 	if newValue.ModEpochNanos > oldValue.ModEpochNanos {
@@ -118,15 +112,11 @@ func LastWriteWins(newValue, oldValue *Value) *Value {
 	return oldValue
 }
 
-func (v Value) tombstoned() bool {
-	return v.TombstoneSinceEpochNanos != 0
-}
-
-func firstTombstoneWins(newValue, oldValue *Value) *Value {
-	if !newValue.tombstoned() {
+func firstTombstoneWins(newValue, oldValue *crdt.Value) *crdt.Value {
+	if !newValue.Tombstoned() {
 		return oldValue
 	}
-	if !oldValue.tombstoned() {
+	if !oldValue.Tombstoned() {
 		return newValue
 	}
 	if newValue.TombstoneSinceEpochNanos < oldValue.TombstoneSinceEpochNanos {
@@ -158,13 +148,13 @@ func NewRoot(when time.Time, branchFactor uint) Root {
 	}
 }
 
-func emptyValue(cfg Config) Value {
+func emptyValue(cfg Config) crdt.Value {
 	if cfg.ValuesLike == nil {
-		return Value{}
+		return crdt.Value{}
 	}
 	aType := reflect.TypeOf(cfg.ValuesLike)
 	aCopy := reflect.New(aType)
-	return Value{Value: aCopy}
+	return crdt.Value{Value: aCopy}
 }
 
 func unmarshal(bytes []byte, i interface{}, cfg Config) error {
@@ -175,7 +165,7 @@ func unmarshal(bytes []byte, i interface{}, cfg Config) error {
 	if cfg.UnmarshalerUsesRegisteredTypes {
 		return cfg.Unmarshal(bytes, i)
 	}
-	cv, ok := i.(*Value)
+	cv, ok := i.(*crdt.Value)
 	if !ok {
 		return ucb(bytes, i)
 	}
@@ -214,7 +204,7 @@ func Load(ctx context.Context, cfg Config, rootName *string, root Root) (*Tree, 
 	}
 	mastCfg := mast.RemoteConfig{
 		KeysLike: cfg.KeysLike,
-		ValuesLike: Value{
+		ValuesLike: crdt.Value{
 			Value: cfg.ValuesLike,
 		},
 		StoreImmutablePartsWith: cfg.StoreImmutablePartsWith,
@@ -280,13 +270,13 @@ func convertMergeFunc(cb func(key, v1, v2 interface{}) interface{}) MergeFunc {
 	return MergeFunc(func(ctx context.Context, newTree *mast.Mast, /*, conflicts *uint64*/
 		added, removed bool, key, addedValue, removedValue interface{},
 		onConflictMerged OnConflictMerged) (bool, error) {
-		var newValue Value
+		var newValue crdt.Value
 		if !added && !removed { // changed
-			av := addedValue.(Value)
-			rv := removedValue.(Value)
+			av := addedValue.(crdt.Value)
+			rv := removedValue.(crdt.Value)
 			newValue = av
 			newValue.Value = cb(key, av.Value, rv.Value)
-			if onConflictMerged != nil && !av.tombstoned() && !rv.tombstoned() &&
+			if onConflictMerged != nil && !av.Tombstoned() && !rv.Tombstoned() &&
 				!reflect.DeepEqual(av.Value, rv.Value) {
 				err := onConflictMerged(key, av.Value, rv.Value)
 				if err != nil {
@@ -297,7 +287,7 @@ func convertMergeFunc(cb func(key, v1, v2 interface{}) interface{}) MergeFunc {
 			// already present
 			return true, nil
 		} else if removed {
-			newValue = removedValue.(Value)
+			newValue = removedValue.(crdt.Value)
 		} else {
 			return false, fmt.Errorf("no added/removed value")
 		}
@@ -338,7 +328,7 @@ func (c *Tree) Merge(ctx context.Context, other *Tree) error {
 func (c *Tree) Tombstone(ctx context.Context, when time.Time, key interface{}) error {
 	n := when.UnixNano()
 	return c.update(ctx, when, key,
-		Value{
+		crdt.Value{
 			ModEpochNanos:            n,
 			TombstoneSinceEpochNanos: n,
 		},
@@ -356,22 +346,21 @@ func (c *Tree) IsTombstoned(ctx context.Context, key interface{}) (bool, error) 
 
 func (c *Tree) Set(ctx context.Context, when time.Time, key, value interface{}) error {
 	return c.update(ctx, when, key,
-		Value{
+		crdt.Value{
 			ModEpochNanos: when.UnixNano(),
 			Value:         value,
 		},
 	)
 }
 
-func (c *Tree) update(ctx context.Context, when time.Time, key interface{}, cv Value) error {
+func (c *Tree) update(ctx context.Context, when time.Time, key interface{}, cv crdt.Value) error {
 	existing := emptyValue(c.Config)
 	contains, err := c.Mast.Get(ctx, key, &existing)
 	if err != nil {
 		return fmt.Errorf("get existing: %w", err)
 	}
 	if contains {
-		var wa *Value
-		wa = LastWriteWins(&cv, &existing)
+		wa := LastWriteWins(&cv, &existing)
 		winner := *wa
 		if wa != &existing {
 			if c.Source != nil {

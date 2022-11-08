@@ -51,6 +51,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/jrhy/mast"
 	s3Persist "github.com/jrhy/mast/persist/s3"
+	crdtpub "github.com/jrhy/s3db/crdt"
 	"github.com/jrhy/s3db/internal/crdt"
 	"github.com/minio/blake2b-simd"
 )
@@ -171,7 +172,7 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 		mergedRoots      map[string][]byte
 		unmergeableRoots int
 	)
-	gob.Register(crdt.Value{})
+	gob.Register(crdtpub.Value{})
 	gob.Register(cfg.KeysLike)
 	if cfg.ValuesLike != nil {
 		gob.Register(cfg.ValuesLike)
@@ -754,7 +755,7 @@ func (s DB) Diff(
 }
 
 func innerValue(v interface{}) interface{} {
-	if cv, ok := v.(crdt.Value); ok {
+	if cv, ok := v.(crdtpub.Value); ok {
 		if cv.TombstoneSinceEpochNanos != 0 {
 			return nil
 		}
@@ -776,7 +777,7 @@ func (s *DB) RemoveTombstones(ctx context.Context, before time.Time) error {
 	cutoff := before.UnixNano()
 	origSize := s.Size()
 	err = sc.crdt.Mast.DiffIter(ctx, nil, func(added, removed bool, key, addedValue, removedValue interface{}) (keepGoing bool, err error) {
-		cv := addedValue.(crdt.Value)
+		cv := addedValue.(crdtpub.Value)
 		ts := cv.TombstoneSinceEpochNanos
 		if ts == 0 || ts >= cutoff {
 			return true, nil
@@ -858,7 +859,7 @@ func (s *DB) TraceHistory(
 	for len(round) > 0 {
 		nextRound := []dbAndCutoff{}
 		for _, r := range round {
-			var gv crdt.Value
+			var gv crdtpub.Value
 			contains, err := r.db.crdt.Mast.Get(ctx, key, &gv)
 			if err != nil {
 				return fmt.Errorf("crdt.get: %w", err)
@@ -941,6 +942,6 @@ func (c *Cursor) Get() (interface{}, interface{}, bool) {
 	if !ok {
 		return nil, nil, ok
 	}
-	innerValue = innerValue.(crdt.Value).Value
+	innerValue = innerValue.(crdtpub.Value).Value
 	return innerKey, innerValue, true
 }
