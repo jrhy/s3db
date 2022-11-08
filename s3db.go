@@ -936,12 +936,12 @@ func (d *DB) Cursor(ctx context.Context) (*Cursor, error) {
 	}, nil
 }
 
-// Get overrides mast.Cursor.Get() to unwrap the crdt.Value.
-func (c *Cursor) Get() (interface{}, interface{}, bool) {
+// Get overrides mast.Cursor.Get() to make the crdt.Value wrapping clear.
+func (c *Cursor) Get() (interface{}, *crdtpub.Value, bool) {
 	innerKey, innerValue, ok := c.Cursor.Get()
 	if !ok {
-		return nil, nil, ok
+		return nil, nil, false
 	}
-	innerValue = innerValue.(crdtpub.Value).Value
-	return innerKey, innerValue, true
+	v := innerValue.(crdtpub.Value)
+	return innerKey, &v, true
 }
