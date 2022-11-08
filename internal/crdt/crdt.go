@@ -79,7 +79,7 @@ var LWW MergeFunc = MergeFunc(
 		if !added && !removed { // changed
 			av := addedValue.(crdt.Value)
 			rv := removedValue.(crdt.Value)
-			newValue = *LastWriteWins(&av, &rv)
+			newValue = *crdt.LastWriteWins(&av, &rv)
 			if onConflictMerged != nil && !av.Tombstoned() && !rv.Tombstoned() &&
 				!reflect.DeepEqual(av.Value, rv.Value) {
 				err := onConflictMerged(key, av.Value, rv.Value)
@@ -102,29 +102,6 @@ var LWW MergeFunc = MergeFunc(
 		return true, nil
 	})
 
-func LastWriteWins(newValue, oldValue *crdt.Value) *crdt.Value {
-	if newValue.Tombstoned() || oldValue.Tombstoned() {
-		return firstTombstoneWins(newValue, oldValue)
-	}
-	if newValue.ModEpochNanos > oldValue.ModEpochNanos {
-		return newValue
-	}
-	return oldValue
-}
-
-func firstTombstoneWins(newValue, oldValue *crdt.Value) *crdt.Value {
-	if !newValue.Tombstoned() {
-		return oldValue
-	}
-	if !oldValue.Tombstoned() {
-		return newValue
-	}
-	if newValue.TombstoneSinceEpochNanos < oldValue.TombstoneSinceEpochNanos {
-		return newValue
-	}
-	return oldValue
-}
-
 type Config struct {
 	KeysLike                       interface{}
 	ValuesLike                     interface{}
@@ -133,7 +110,7 @@ type Config struct {
 	Marshal                        func(interface{}) ([]byte, error)
 	Unmarshal                      func([]byte, interface{}) error
 	UnmarshalerUsesRegisteredTypes bool
-	CustomMergeValueOnly           func(key, v1, v2 interface{}) interface{}
+	CustomMerge                    func(key interface{}, v1, v2 crdt.Value) crdt.Value
 	OnConflictMerged
 }
 
@@ -221,14 +198,14 @@ func Load(ctx context.Context, cfg Config, rootName *string, root Root) (*Tree, 
 	}
 	switch root.MergeMode {
 	case MergeModeLWW:
-		if cfg.CustomMergeValueOnly != nil {
+		if cfg.CustomMerge != nil {
 			return nil, errors.New("config.CustomMergeValueOnly conflicts with MergeModeLWW")
 		}
 		if cfg.OnConflictMerged != nil {
 			return nil, errors.New("config.OnConflictMerged handler conflicts with MergeModeLWW")
 		}
 	case MergeModeCustom:
-		if cfg.CustomMergeValueOnly == nil {
+		if cfg.CustomMerge == nil {
 			return nil, errors.New("MergeModeCustom requires config.CustomMergeValueOnly")
 		}
 		if cfg.OnConflictMerged != nil {
@@ -238,7 +215,7 @@ func Load(ctx context.Context, cfg Config, rootName *string, root Root) (*Tree, 
 		if cfg.OnConflictMerged == nil {
 			return nil, errors.New("MergeModeCustomLWW requires config.OnConflictMerged")
 		}
-		if cfg.CustomMergeValueOnly != nil {
+		if cfg.CustomMerge != nil {
 			return nil, errors.New("config.CustomMergeValueOnly handler conflicts with MergeModeCustomLWW")
 		}
 	}
@@ -266,8 +243,8 @@ func (c *Tree) MakeRoot(ctx context.Context) (*Root, error) {
 	return &crdtRoot, nil
 }
 
-func convertMergeFunc(cb func(key, v1, v2 interface{}) interface{}) MergeFunc {
-	return MergeFunc(func(ctx context.Context, newTree *mast.Mast, /*, conflicts *uint64*/
+func convertMergeFunc(cb func(key interface{}, v1, v2 crdt.Value) crdt.Value) MergeFunc {
+	return MergeFunc(func(ctx context.Context, newTree *mast.Mast,
 		added, removed bool, key, addedValue, removedValue interface{},
 		onConflictMerged OnConflictMerged) (bool, error) {
 		var newValue crdt.Value
@@ -275,7 +252,7 @@ func convertMergeFunc(cb func(key, v1, v2 interface{}) interface{}) MergeFunc {
 			av := addedValue.(crdt.Value)
 			rv := removedValue.(crdt.Value)
 			newValue = av
-			newValue.Value = cb(key, av.Value, rv.Value)
+			newValue = cb(key, av, rv)
 			if onConflictMerged != nil && !av.Tombstoned() && !rv.Tombstoned() &&
 				!reflect.DeepEqual(av.Value, rv.Value) {
 				err := onConflictMerged(key, av.Value, rv.Value)
@@ -306,7 +283,7 @@ func (c *Tree) Merge(ctx context.Context, other *Tree) error {
 	}
 	var mergeFunc MergeFunc
 	if c.MergeMode == MergeModeCustom {
-		mergeFunc = convertMergeFunc(c.Config.CustomMergeValueOnly)
+		mergeFunc = convertMergeFunc(c.Config.CustomMerge)
 	} else {
 		mergeFunc = LWW
 	}
@@ -360,7 +337,7 @@ func (c *Tree) update(ctx context.Context, when time.Time, key interface{}, cv c
 		return fmt.Errorf("get existing: %w", err)
 	}
 	if contains {
-		wa := LastWriteWins(&cv, &existing)
+		wa := crdt.LastWriteWins(&cv, &existing)
 		winner := *wa
 		if wa != &existing {
 			if c.Source != nil {
