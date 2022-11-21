@@ -365,6 +365,10 @@ func (c *Tree) Get(ctx context.Context, key interface{}, value interface{}) (boo
 	if cv.TombstoneSinceEpochNanos > 0 {
 		return false, nil
 	}
+	if cvp, ok := value.(*crdt.Value); ok {
+		*cvp = cv
+		return true, nil
+	}
 	reflect.ValueOf(value).Elem().Set(reflect.ValueOf(cv.Value))
 	return true, nil
 }

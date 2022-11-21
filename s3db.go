@@ -697,7 +697,8 @@ func (s *DB) Set(ctx context.Context, when time.Time, key interface{}, value int
 }
 
 // Get retrieves the value for the given key. value must be a pointer that to
-// which an Config.ValuesLike can be assigned.
+// which an Config.ValuesLike can be assigned, OR a pointer to a crdt.Value,
+// in which case the CRDT value metadata will be included.
 func (s *DB) Get(ctx context.Context, key interface{}, value interface{}) (bool, error) {
 	return s.crdt.Get(ctx, key, value)
 }
