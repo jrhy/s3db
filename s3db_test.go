@@ -468,6 +468,24 @@ func bucketContentHashForPrefix(s S3Interface, bucketName, prefix string) string
 	return base64.RawURLEncoding.EncodeToString(digest.Sum(nil))
 }
 
+func bucketUsage(s S3Interface, bucketName, prefix string) int {
+	list, err := s.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
+		Bucket: &bucketName,
+		Prefix: &prefix,
+	})
+	if err != nil {
+		panic(err)
+	}
+	if *list.IsTruncated {
+		panic("too much crap")
+	}
+	res := 0
+	for _, o := range list.Contents {
+		res += int(*o.Size)
+	}
+	return res
+}
+
 func TestAggregation(t *testing.T) {
 	if s3test.CanParallelize() {
 		t.Parallel()
@@ -1520,4 +1538,40 @@ func TestCursor(t *testing.T) {
 	require.False(t, ok)
 	require.Nil(t, k)
 	require.Nil(t, v)
+}
+
+func TestStatefulMarshalingEfficiency(t *testing.T) {
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
+	tm := newTestTime()
+	c, bucketName, closer := s3test.Client()
+	t.Cleanup(closer)
+	cfg := Config{
+		Storage:    &S3BucketInfo{c.Endpoint, bucketName, "inefficient"},
+		KeysLike:   1234,
+		ValuesLike: "hi",
+		NodeFormat: string(mast.V115Binary),
+	}
+	populate := func(cfg Config) {
+		s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+		require.NoError(t, err)
+		for i := 0; i < 5; i++ {
+			err := s.Set(ctx, tm.next(), i, "")
+			require.NoError(t, err)
+		}
+		_, err = s.Commit(ctx)
+		require.NoError(t, err)
+	}
+	populate(cfg)
+
+	cfg.Storage = &S3BucketInfo{c.Endpoint, bucketName, "statefulMarshal"}
+	cfg.NodeFormat = string(mast.V1Marshaler)
+	populate(cfg)
+
+	v115Usage := bucketUsage(c, bucketName, "inefficient")
+	// t.Logf("with v115Binary: %d", v115Usage)
+	v1Usage := bucketUsage(c, bucketName, "statefulMarshal")
+	// t.Logf("with statefun marshaling: %d", v1Usage)
+	require.Less(t, v1Usage, v115Usage)
 }

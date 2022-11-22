@@ -105,6 +105,8 @@ type Config struct {
 	LogFunc func(string)
 
 	CustomMerge func(key interface{}, v1, v2 crdtpub.Value) crdtpub.Value
+
+	NodeFormat string
 }
 
 // OnConflictMerged is a callback that will be invoked whenever entries for a key have
@@ -184,6 +186,7 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 		ValuesLike:                     cfg.ValuesLike,
 		StoreImmutablePartsWith:        nodePersist,
 		NodeCache:                      cfg.NodeCache,
+		NodeFormat:                     cfg.NodeFormat,
 		Marshal:                        marshalGob,
 		Unmarshal:                      unmarshalGob,
 		UnmarshalerUsesRegisteredTypes: true,
@@ -402,6 +405,7 @@ func emptyRoot(when time.Time, branchFactor uint, crdtConfig crdt.Config) crdt.R
 	} else if crdtConfig.OnConflictMerged != nil {
 		empty.MergeMode = crdt.MergeModeCustomLWW
 	}
+	empty.NodeFormat = crdtConfig.NodeFormat
 	return empty
 }
 

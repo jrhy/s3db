@@ -112,6 +112,7 @@ type Config struct {
 	UnmarshalerUsesRegisteredTypes bool
 	CustomMerge                    func(key interface{}, v1, v2 crdt.Value) crdt.Value
 	OnConflictMerged
+	NodeFormat string
 }
 
 type OnConflictMerged func(key, v1, v2 interface{}) error
@@ -157,7 +158,7 @@ func unmarshal(bytes []byte, i interface{}, cfg Config) error {
 		return fmt.Errorf("unmarshal crdtValue message: %w", err)
 	}
 
-	if jv.Value != nil {
+	if len(jv.Value) != 0 {
 		aType := reflect.TypeOf(cfg.ValuesLike)
 		aCopy := reflect.New(aType)
 		err = json.Unmarshal(jv.Value, aCopy.Interface())
