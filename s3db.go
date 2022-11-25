@@ -35,6 +35,7 @@ package s3db
 import (
 	"context"
 	"encoding/gob"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -79,6 +80,7 @@ type DB struct {
 	mergedRoots      map[string][]byte
 	unmergeableRoots int
 	tombstoned       bool
+	s3dbVersion      int
 }
 
 // Config defines how values are stored and (un)marshaled.
@@ -197,6 +199,7 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 	if cfg.OnConflictMerged != nil {
 		crdtConfig.OnConflictMerged = crdt.OnConflictMerged(cfg.OnConflictMerged)
 	}
+	var s3dbVersion int
 	if opts.SingleVersion != "" {
 		root, _, err := loadNamedRoot(ctx, rootPersist, mergedPersist, opts.SingleVersion)
 		if err != nil {
@@ -206,9 +209,10 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 		if err != nil {
 			return nil, fmt.Errorf("load: %w", err)
 		}
+		s3dbVersion = root.S3DBVersion
 	} else {
 		var err error
-		tree, mergedRoots, unmergeableRoots, err = mergeRoots(ctx, S3, cfg, crdtConfig, rootPersist, when, opts.ForceRebranch)
+		tree, mergedRoots, unmergeableRoots, err = mergeRoots(ctx, S3, cfg, crdtConfig, rootPersist, when, opts.ForceRebranch, &s3dbVersion)
 		if err != nil {
 			return nil, fmt.Errorf("merge: %w", err)
 		}
@@ -222,6 +226,7 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 		merged:           mergedPersist,
 		cfg:              &cfg,
 		crdt:             *tree,
+		s3dbVersion:      s3dbVersion,
 		mergedRoots:      mergedRoots,
 		unmergeableRoots: unmergeableRoots,
 	}
@@ -302,6 +307,7 @@ func mergeRoots(
 	rootPersist *s3Persist.Persist,
 	when time.Time,
 	forceRebranch bool,
+	maxVersion *int,
 ) (*crdt.Tree, map[string][]byte, int, error) {
 	roots, err := listObjects(ctx, S3, rootPersist.BucketName, rootPersist.Prefix)
 	if err != nil {
@@ -328,6 +334,9 @@ func mergeRoots(
 				continue
 			}
 			return nil, nil, 0, err
+		}
+		if root.S3DBVersion > *maxVersion {
+			*maxVersion = root.S3DBVersion
 		}
 		graft, err := crdt.Load(ctx, crdtConfig, &key, *root)
 		if err != nil {
@@ -384,10 +393,12 @@ func mergeRoots(
 	unmergedRoots := len(roots) - len(mergedRoots)
 
 	if tree == nil {
-		tree, err = crdt.Load(ctx, crdtConfig, nil, emptyRoot(when, cfg.BranchFactor, crdtConfig))
+		root := emptyRoot(when, cfg.BranchFactor, crdtConfig)
+		tree, err = crdt.Load(ctx, crdtConfig, nil, root)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("new root: %w", err)
 		}
+		*maxVersion = root.S3DBVersion
 	} else {
 		if len(mergedRoots) == 1 {
 			tree.Source = getFirstKey(mergedRoots)
@@ -406,6 +417,7 @@ func emptyRoot(when time.Time, branchFactor uint, crdtConfig crdt.Config) crdt.R
 		empty.MergeMode = crdt.MergeModeCustomLWW
 	}
 	empty.NodeFormat = crdtConfig.NodeFormat
+	empty.S3DBVersion = 1
 	return empty
 }
 
@@ -414,10 +426,13 @@ func loadRoot(ctx context.Context, persist mast.Persist, key string) (*crdt.Root
 	if err != nil {
 		return nil, nil, err
 	}
-	root := crdt.Root{}
-	err = unmarshalGob(rootBytes, &root)
-	if err != nil {
-		return nil, nil, err
+	var root crdt.Root
+	jsonErr := json.Unmarshal(rootBytes, &root)
+	if jsonErr != nil {
+		err = unmarshalGob(rootBytes, &root)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not unmarshal as either json: %v, or unmarshal as gob: %w", jsonErr, err)
+		}
 	}
 	return &root, rootBytes, nil
 }
@@ -435,10 +450,23 @@ func (s *DB) Commit(ctx context.Context) (*string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("mast makeroot: %w", err)
 	}
-	rootBytes, err := marshalGob(root)
-	if err != nil {
-		return nil, fmt.Errorf("marshal root: %w", err)
+	root.S3DBVersion = s.s3dbVersion
+	var rootBytes []byte
+	switch s.s3dbVersion {
+	case 0:
+		rootBytes, err = marshalGob(root)
+		if err != nil {
+			return nil, fmt.Errorf("marshal root: gob: %w", err)
+		}
+	case 1:
+		rootBytes, err = json.Marshal(root)
+		if err != nil {
+			return nil, fmt.Errorf("marshal root: json: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unhandled s3db version: %v", root.S3DBVersion)
 	}
+
 	hashBytes := blake2b.Sum256(rootBytes)
 	crTime := big.NewInt(root.Created.Unix()).Text(62)
 	hash := big.NewInt(0).SetBytes(hashBytes[:12]).Text(62)

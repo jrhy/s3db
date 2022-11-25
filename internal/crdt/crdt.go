@@ -28,6 +28,7 @@ type Root struct {
 	Created      *time.Time `json:"cr,omitempty"`
 	MergeSources []string   `json:"p,omitempty"`
 	MergeMode    int        `json:"mm,omitempty"`
+	S3DBVersion  int        `json:"s3db_version,omitempty"`
 }
 
 const (
