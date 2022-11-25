@@ -113,7 +113,7 @@ type Config struct {
 	UnmarshalerUsesRegisteredTypes bool
 	CustomMerge                    func(key interface{}, v1, v2 crdt.Value) crdt.Value
 	OnConflictMerged
-	NodeFormat string
+	MastNodeFormat string
 }
 
 type OnConflictMerged func(key, v1, v2 interface{}) error

@@ -1548,10 +1548,10 @@ func TestStatefulMarshalingEfficiency(t *testing.T) {
 	c, bucketName, closer := s3test.Client()
 	t.Cleanup(closer)
 	cfg := Config{
-		Storage:    &S3BucketInfo{c.Endpoint, bucketName, "inefficient"},
-		KeysLike:   1234,
-		ValuesLike: "hi",
-		NodeFormat: string(mast.V115Binary),
+		Storage:        &S3BucketInfo{c.Endpoint, bucketName, "inefficient"},
+		KeysLike:       1234,
+		ValuesLike:     "hi",
+		MastNodeFormat: string(mast.V115Binary),
 	}
 	populate := func(cfg Config) {
 		s, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
@@ -1566,7 +1566,7 @@ func TestStatefulMarshalingEfficiency(t *testing.T) {
 	populate(cfg)
 
 	cfg.Storage = &S3BucketInfo{c.Endpoint, bucketName, "statefulMarshal"}
-	cfg.NodeFormat = string(mast.V1Marshaler)
+	cfg.MastNodeFormat = string(mast.V1Marshaler)
 	populate(cfg)
 
 	v115Usage := bucketUsage(c, bucketName, "inefficient")

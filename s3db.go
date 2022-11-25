@@ -108,7 +108,15 @@ type Config struct {
 
 	CustomMerge func(key interface{}, v1, v2 crdtpub.Value) crdtpub.Value
 
-	NodeFormat string
+	MastNodeFormat string
+
+	CustomMarshal func(interface{}) ([]byte, error)
+	// CustomUnmarshal, if using registered types, will be invoked
+	// to read tree nodes which are mast.PersistedNode with keys of
+	// KeysLike, and values of crdtpub.Value of ValuesLike. All of
+	// those should be registered before invoking s3db.Open().
+	CustomUnmarshal              func([]byte, interface{}) error
+	UnmarshalUsesRegisteredTypes bool
 }
 
 // OnConflictMerged is a callback that will be invoked whenever entries for a key have
@@ -176,22 +184,31 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 		mergedRoots      map[string][]byte
 		unmergeableRoots int
 	)
-	gob.Register(crdtpub.Value{})
-	gob.Register(cfg.KeysLike)
-	if cfg.ValuesLike != nil {
-		gob.Register(cfg.ValuesLike)
+	marshal := marshalGob
+	unmarshal := unmarshalGob
+	unmarshalUsesRegisteredTypes := true
+	if cfg.CustomMarshal != nil {
+		marshal = cfg.CustomMarshal
+		unmarshal = cfg.CustomUnmarshal
+		unmarshalUsesRegisteredTypes = cfg.UnmarshalUsesRegisteredTypes
 	} else {
-		gob.Register(map[string]interface{}{})
+		gob.Register(crdtpub.Value{})
+		gob.Register(cfg.KeysLike)
+		if cfg.ValuesLike != nil {
+			gob.Register(cfg.ValuesLike)
+		} else {
+			gob.Register(map[string]interface{}{})
+		}
 	}
 	crdtConfig := crdt.Config{
 		KeysLike:                       cfg.KeysLike,
 		ValuesLike:                     cfg.ValuesLike,
 		StoreImmutablePartsWith:        nodePersist,
 		NodeCache:                      cfg.NodeCache,
-		NodeFormat:                     cfg.NodeFormat,
-		Marshal:                        marshalGob,
-		Unmarshal:                      unmarshalGob,
-		UnmarshalerUsesRegisteredTypes: true,
+		MastNodeFormat:                 cfg.MastNodeFormat,
+		Marshal:                        marshal,
+		Unmarshal:                      unmarshal,
+		UnmarshalerUsesRegisteredTypes: unmarshalUsesRegisteredTypes,
 	}
 	if cfg.CustomMerge != nil {
 		crdtConfig.CustomMerge = cfg.CustomMerge
@@ -416,7 +433,7 @@ func emptyRoot(when time.Time, branchFactor uint, crdtConfig crdt.Config) crdt.R
 	} else if crdtConfig.OnConflictMerged != nil {
 		empty.MergeMode = crdt.MergeModeCustomLWW
 	}
-	empty.NodeFormat = crdtConfig.NodeFormat
+	empty.NodeFormat = crdtConfig.MastNodeFormat
 	empty.S3DBVersion = 1
 	return empty
 }
