@@ -3,10 +3,10 @@ module github.com/jrhy/s3db
 go 1.14
 
 require (
-	github.com/aws/aws-sdk-go v1.44.142
+	github.com/aws/aws-sdk-go v1.44.162
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
-	github.com/johannesboyne/gofakes3 v0.0.0-20221110173912-32fb85c5aed6
-	github.com/jrhy/mast v1.2.14
+	github.com/johannesboyne/gofakes3 v0.0.0-20221128113635-c2f5cc6b5294
+	github.com/jrhy/mast v1.2.16
 	github.com/kr/text v0.2.0 // indirect
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
