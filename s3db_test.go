@@ -357,7 +357,7 @@ func TestVersionGraph(t *testing.T) {
 	dbgprintf("s2ModifyRoot:\t\t%s\n", *s2ModifyRootRoot)
 	dbgprintf("sMerged:\t%s\n", *sMergedRoot)
 
-	nodes, _, err := sMerged.getHistoricRootsAndNodes(ctx, *sMerged.crdt.Created)
+	nodes, _, err := sMerged.getHistoricRootsAndNodes(ctx, *sMerged.crdt.Created, cfg.LogFunc)
 	require.NoError(t, err)
 	dbgprintf("\nsuperseded nodes:\n")
 	for i := range nodes {
@@ -925,6 +925,7 @@ func createTestTreeWithConfig(name string, baseCfg *Config, key, value interface
 		cfg = *baseCfg
 	}
 	cfg.Storage = &S3BucketInfo{c.Endpoint, bucketName, name}
+	cfg.LogFunc = func(s string) { fmt.Println(s) }
 	cfg.KeysLike = key
 	cfg.ValuesLike = value
 	if cfg.BranchFactor == 0 {
@@ -1092,6 +1093,7 @@ func TestDeleteHistory(t *testing.T) {
 	require.Equal(t, uint64(2), s.Size())
 	reopen(&s, c, cfg, tm.next())
 
+	t.Logf("deleting version with formerly-tombstoned entries, leaving 2\n")
 	require.NoError(t, DeleteHistoricVersions(ctx, s, tm.next()))
 	origHash := contentHash(s)
 
@@ -1106,7 +1108,7 @@ func TestDeleteHistory(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(o))
 
-	// test DeleteHistoryBefore idempotency
+	t.Logf("test DeleteHistoryBefore idempotency\n")
 	require.NoError(t, DeleteHistoricVersions(ctx, s, tm.next()))
 	newHash := contentHash(s)
 	assert.Equal(t, origHash, newHash)
@@ -1119,24 +1121,28 @@ func TestDeleteHistory(t *testing.T) {
 	}))
 	require.Equal(t, 2, count)
 
-	// now delete everything
+	t.Logf("now, delete everything. tombstoning...\n")
 	require.NoError(t, s.Tombstone(ctx, tm.next(), 1))
 	require.NoError(t, s.Tombstone(ctx, tm.next(), 4))
+	t.Logf("tombstoned entries, now committing...\n")
 	reopen(&s, c, cfg, tm.next())
+	t.Logf("removing tombstones...\n")
 	require.Equal(t, uint64(2), s.Size())
 	require.NoError(t, s.RemoveTombstones(ctx, tm.next()))
 	require.Equal(t, uint64(0), s.Size())
 	require.True(t, s.tombstoned)
+	t.Logf("removed tombstones, now committing...\n")
 	reopen(&s, c, cfg, tm.next())
 	require.False(t, s.tombstoned)
 	require.Equal(t, uint64(0), s.Size())
 	require.False(t, s.IsDirty())
+	t.Logf("deleting historic versions...\n")
 	require.NoError(t, DeleteHistoricVersions(ctx, s, tm.next()))
 	require.False(t, s.IsDirty())
 
 	o, err = s.listRoots(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(o), "all the current roots should have been removed")
+	require.Equal(t, []string{}, o, "all the current roots should have been removed")
 	o, err = s.listMergedRoots(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(o), "there really shouldn't be any merged roots left")

@@ -359,11 +359,13 @@ func mergeRoots(
 		if err != nil {
 			var ae awserr.Error
 			if errors.As(err, &ae) && ae.Code() == s3.ErrCodeNoSuchKey {
-				// TODO: log via callback instead
 				if cfg.LogFunc != nil {
-					cfg.LogFunc(fmt.Sprintf("skipping merge for deleted root %v: %v", key, err))
+					cfg.LogFunc(fmt.Sprintf("skipping merge for deleted root or parent in %v: %v", key, err))
 				}
 				continue
+			}
+			if cfg.LogFunc != nil {
+				cfg.LogFunc(fmt.Sprintf("skipping merge for un-crdt.Load()able root %v: %v", key, err))
 			}
 			return nil, nil, 0, err
 		}
@@ -564,7 +566,7 @@ func getFirstKey(m map[string][]byte) *string {
 
 type rootGraph map[string]*crdt.Root
 
-func getFirst(m map[string]interface{}) (string, bool) {
+func getFirst(m map[string]struct{}) (string, bool) {
 	for k := range m {
 		return k, true
 	}
@@ -573,9 +575,9 @@ func getFirst(m map[string]interface{}) (string, bool) {
 
 func (s DB) loadRootGraph(ctx context.Context) (rootGraph, error) {
 	g := rootGraph{}
-	todo := map[string]interface{}{}
+	todo := map[string]struct{}{}
 	for _, rootName := range s.crdt.MergeSources {
-		todo[rootName] = nil
+		todo[rootName] = struct{}{}
 	}
 	for {
 		rootName, ok := getFirst(todo)
@@ -595,7 +597,7 @@ func (s DB) loadRootGraph(ctx context.Context) (rootGraph, error) {
 		g[rootName] = root
 		for _, parentName := range root.MergeSources {
 			if _, ok := g[parentName]; !ok {
-				todo[parentName] = nil
+				todo[parentName] = struct{}{}
 			}
 		}
 		delete(todo, rootName)
@@ -669,6 +671,7 @@ func (s *DB) moveMergedRoots(ctx context.Context, newRoot string, mergedRoots ma
 func (s *DB) getHistoricRootsAndNodes(
 	ctx context.Context,
 	olderThan time.Time,
+	logFunc func(string),
 ) (roots, nodes []string, err error) {
 	rootCacheByName, err := s.loadRootGraph(ctx)
 	if err != nil {
@@ -692,18 +695,21 @@ func (s *DB) getHistoricRootsAndNodes(
 	for parentName, children := range candidateRoots {
 		parentRoot, ok := rootCacheByName[parentName]
 		if !ok {
-			fmt.Printf("")
 			continue
 		}
 		parent, err := crdt.Load(ctx, s.crdt.Config, &parentName, *parentRoot)
 		if err != nil {
-			// TODO: log
+			if logFunc != nil {
+				logFunc(fmt.Sprintf("error loading parent %v: %v\n", parentRoot, err))
+			}
 			continue
 		}
 		for childName, childRoot := range children {
 			child, err := crdt.Load(ctx, s.crdt.Config, &childName, *childRoot)
 			if err != nil {
-				// TODO: log
+				if logFunc != nil {
+					logFunc(fmt.Sprintf("error loading child %v: %v\n", childName, err))
+				}
 				continue
 			}
 			err = child.Mast.DiffLinks(ctx, parent.Mast,
@@ -716,7 +722,9 @@ func (s *DB) getHistoricRootsAndNodes(
 					return true, nil
 				})
 			if err != nil {
-				// TODO: log
+				if logFunc != nil {
+					logFunc(fmt.Sprintf("error diffing %s: %v\n", childName, err))
+				}
 			}
 		}
 	}
@@ -852,7 +860,7 @@ func DeleteHistoricVersions(ctx context.Context, s *DB, before time.Time) error 
 	if s.readonly {
 		return ErrReadOnly
 	}
-	roots, nodes, err := s.getHistoricRootsAndNodes(ctx, before)
+	roots, nodes, err := s.getHistoricRootsAndNodes(ctx, before, s.cfg.LogFunc)
 	if err != nil {
 		return err
 	}
