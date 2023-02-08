@@ -862,7 +862,7 @@ func DeleteHistoricVersions(ctx context.Context, s *DB, before time.Time) error 
 	}
 	roots, nodes, err := s.getHistoricRootsAndNodes(ctx, before, s.cfg.LogFunc)
 	if err != nil {
-		return err
+		return fmt.Errorf("get historic roots: %w", err)
 	}
 	for _, l := range nodes {
 		_, err := s.s3Client.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
@@ -870,7 +870,7 @@ func DeleteHistoricVersions(ctx context.Context, s *DB, before time.Time) error 
 			Bucket: aws.String(s.persist.(*persistEncryptor).BucketName),
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("delete node: %s: %w", l, err)
 		}
 	}
 	for _, l := range roots {
@@ -879,7 +879,7 @@ func DeleteHistoricVersions(ctx context.Context, s *DB, before time.Time) error 
 			Bucket: aws.String(s.merged.BucketName),
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("delete root: %s: %w", l, err)
 		}
 	}
 	// An empty current root is equivalent to a nonexistent root,
