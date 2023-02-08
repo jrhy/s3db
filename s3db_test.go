@@ -768,16 +768,6 @@ func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
 
 	origHash := contentHash(s)
 
-	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
-		err := s.Set(ctx, origTime, i, "new value with same modtime should be no-op")
-		require.NoError(t, err)
-	}
-	assert.False(t, s.IsDirty())
-	_, err = s.Commit(ctx)
-	require.NoError(t, err)
-	newHash := contentHash(s)
-	assert.Equal(t, origHash, newHash, "re-set existing values with same modification time shouldn't change the bucket")
-
 	newTime := tm.next()
 	for i := 0; uint(i) < cfg.BranchFactor+1; i++ {
 		err := s.Set(ctx, newTime, i, "")
@@ -786,7 +776,7 @@ func TestSetWithAndWithoutLaterModificationTime(t *testing.T) {
 	assert.True(t, s.IsDirty())
 	_, err = s.Commit(ctx)
 	require.NoError(t, err)
-	newHash = contentHash(s)
+	newHash := contentHash(s)
 	assert.NotEqual(t, origHash, newHash, "set entry with later modification time should result in new content even with unchanged value")
 }
 

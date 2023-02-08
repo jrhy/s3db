@@ -15,7 +15,7 @@ func LastWriteWins(newValue, oldValue *Value) *Value {
 	if newValue.Tombstoned() || oldValue.Tombstoned() {
 		return firstTombstoneWins(newValue, oldValue)
 	}
-	if newValue.ModEpochNanos > oldValue.ModEpochNanos {
+	if newValue.ModEpochNanos >= oldValue.ModEpochNanos {
 		return newValue
 	}
 	return oldValue
