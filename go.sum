@@ -3,6 +3,8 @@ github.com/aws/aws-sdk-go v1.44.194 h1:1ZDK+QDcc5oRbZGgRZSz561eR8XVizXCeGpoZKo33
 github.com/aws/aws-sdk-go v1.44.194/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
 github.com/aws/aws-sdk-go v1.44.199 h1:hYuQmS4zLMJR9v2iOp2UOD6Vi/0V+nwyR/Uhrkrtlbc=
 github.com/aws/aws-sdk-go v1.44.199/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
+github.com/aws/aws-sdk-go v1.44.205 h1:q23NJXgLPIuBMn4zaluWWz57HPP5z7Ut8ZtK1D3N9bs=
+github.com/aws/aws-sdk-go v1.44.205/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -25,6 +27,8 @@ github.com/jrhy/mast v1.2.19 h1:YuT5uWpGkuCmVr8GqzMW2lTys/R6V6pki6tOwfTOihI=
 github.com/jrhy/mast v1.2.19/go.mod h1:w1TWYdBuQBJrNjpKbvjxnKlp4iKUaBNQlhQyl8KmUSA=
 github.com/jrhy/mast v1.2.20 h1:Q8gax1rkB4KM0zj4Q7OAIFn+gZmj2FbeXM/vNKsDc3c=
 github.com/jrhy/mast v1.2.20/go.mod h1:w1TWYdBuQBJrNjpKbvjxnKlp4iKUaBNQlhQyl8KmUSA=
+github.com/jrhy/mast v1.2.21 h1:74rIC/Y+X/CJeqWziSwlBOhIeHaIc+xyf31L6kjUvGY=
+github.com/jrhy/mast v1.2.21/go.mod h1:vRFlgFd4upTVoa7Z3OrH3kJB5NWViqWnh4WjEMlVNBs=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
