@@ -15,10 +15,10 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/docopt/docopt-go"
-	"github.com/jrhy/s3db"
+	"github.com/jrhy/s3db/kv"
 )
 
-const version = "0.8"
+const version = "0.1"
 
 var (
 	subcommandFuncs = map[string]func(*subcommandArgs) int{}
@@ -40,12 +40,12 @@ type subcommandArgs struct {
 	Stderr        io.Writer
 
 	// derived
-	encryptor         s3db.Encryptor
+	encryptor         kv.Encryptor
 	SubcommandOptions docopt.Opts
 
 	// outputs
-	db     *s3db.DB
-	s3opts *s3db.OpenOptions
+	db     *kv.DB
+	s3opts *kv.OpenOptions
 	Result struct {
 		suppressCommit bool
 	}
@@ -61,12 +61,12 @@ func main() {
 }
 
 func parseArgs(s *subcommandArgs, args []string) {
-	usage := `s3db v` + version + `
+	usage := `kv v` + version + `
 
 Usage:
-  s3db --bucket=<name> [--master-key-file=<path>] [--prefix=<s3-prefix>] 
+  kv --bucket=<name> [--master-key-file=<path>] [--prefix=<s3-prefix>] 
 	   [-qv] <command> [<arg>...]
-  s3db -h
+  kv -h
 
 Options:
   -b, --bucket=<name>    S3 bucket to put the database in
@@ -115,7 +115,7 @@ func (s *subcommandArgs) run(args []string) int {
 			fmt.Fprintln(s.Stderr, err)
 			return 1
 		}
-		s.encryptor = s3db.V1NodeEncryptor(keyBytes)
+		s.encryptor = kv.V1NodeEncryptor(keyBytes)
 	}
 	if f, ok := subcommandFuncs[s.Subcommand]; ok {
 		su := subcommandUsage[s.Subcommand]
@@ -160,7 +160,7 @@ func (s *subcommandArgs) run(args []string) int {
 	return 0
 }
 
-func open(ctx context.Context, opts *s3db.OpenOptions, args *subcommandArgs) *s3db.DB {
+func open(ctx context.Context, opts *kv.OpenOptions, args *subcommandArgs) *kv.DB {
 	if args.Bucket == "" {
 		fmt.Fprintf(args.Stderr, "--bucket not set\n")
 		os.Exit(1)
@@ -171,8 +171,8 @@ func open(ctx context.Context, opts *s3db.OpenOptions, args *subcommandArgs) *s3
 		os.Exit(1)
 	}
 
-	cfg := s3db.Config{
-		Storage: &s3db.S3BucketInfo{
+	cfg := kv.Config{
+		Storage: &kv.S3BucketInfo{
 			EndpointURL: s.Endpoint,
 			BucketName:  args.Bucket,
 			Prefix:      args.Prefix,
@@ -181,11 +181,11 @@ func open(ctx context.Context, opts *s3db.OpenOptions, args *subcommandArgs) *s3
 		ValuesLike:    "stringy",
 		NodeEncryptor: args.encryptor,
 	}
-	var so s3db.OpenOptions
+	var so kv.OpenOptions
 	if opts != nil {
 		so = *opts
 	}
-	db, err := s3db.Open(ctx, s, cfg, so, time.Now())
+	db, err := kv.Open(ctx, s, cfg, so, time.Now())
 	if err != nil {
 		err = fmt.Errorf("open: %w", err)
 		fmt.Fprintln(args.Stderr, err)

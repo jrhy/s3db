@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jrhy/s3db"
+	"github.com/jrhy/s3db/kv"
 )
 
 func init() {
@@ -20,7 +20,7 @@ func init() {
 			return 1
 		}
 		db := open(sa.Ctx, nil, sa)
-		err = s3db.DeleteHistoricVersions(sa.Ctx, db, time.Now().Add(-d))
+		err = kv.DeleteHistoricVersions(sa.Ctx, db, time.Now().Add(-d))
 		if err != nil {
 			err = fmt.Errorf("delete-history: %w", err)
 			fmt.Fprintln(sa.Stderr, err)

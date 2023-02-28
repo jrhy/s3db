@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jrhy/s3db"
+	"github.com/jrhy/s3db/kv"
 )
 
 func init() {
@@ -24,7 +24,7 @@ func init() {
 			}
 			afterTime = time.Now().Add(-d)
 		}
-		db := open(sa.Ctx, &s3db.OpenOptions{ReadOnly: true}, sa)
+		db := open(sa.Ctx, &kv.OpenOptions{ReadOnly: true}, sa)
 		keys := []string{}
 		if len(sa.Arg) == 0 {
 			fmt.Fprintln(sa.Stderr, usage)

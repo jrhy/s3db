@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package jrhy.s3db.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/jrhy/s3db/proto/v1";
+
+message Node {
+  repeated SQLiteValue key = 1;
+  repeated CRDTValue value = 2;
+  repeated string link = 3;
+}
+
+enum Type {
+  NULL = 0;
+  INT = 1;
+  REAL = 2;
+  TEXT = 3;
+  BLOB = 4;
+}
+
+message SQLiteValue {
+  Type Type = 1;
+  int64 Int = 2;
+  double Real = 3;
+  string Text = 4;
+  bytes Blob = 5;
+} 
+
+message CRDTValue {
+  int64 ModEpochNanos = 1;
+  string PreviousRoot = 2;
+  int64 TombstoneSinceEpochNanos = 3;
+  Row Value = 4;
+}
+
+message Row {
+  map<string, ColumnValue> ColumnValues = 1;
+  bool Deleted = 2;
+  google.protobuf.Duration DeleteUpdateOffset = 3;
+}
+
+message ColumnValue {
+  google.protobuf.Duration UpdateOffset = 1;
+  SQLiteValue Value = 2;
+}

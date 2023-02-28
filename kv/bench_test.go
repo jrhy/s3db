@@ -1,4 +1,4 @@
-package s3db_test
+package kv_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 
-	"github.com/jrhy/s3db"
+	"github.com/jrhy/s3db/kv"
 )
 
 func BenchmarkSet1(b *testing.B) {
@@ -81,14 +81,14 @@ func BenchmarkGetNStored(b *testing.B) {
 	}
 }
 
-func newTestTree(zeroKey, zeroValue interface{}) (*s3db.DB, func()) {
+func newTestTree(zeroKey, zeroValue interface{}) (*kv.DB, func()) {
 	ctx := context.Background()
 	s3cfg, close := setupS3("bucket")
 
 	c := s3.New(session.New(s3cfg))
 
-	cfg := s3db.Config{
-		Storage: &s3db.S3BucketInfo{
+	cfg := kv.Config{
+		Storage: &kv.S3BucketInfo{
 			EndpointURL: c.Endpoint,
 			BucketName:  "bucket",
 			Prefix:      "/my-awesome-database",
@@ -96,7 +96,7 @@ func newTestTree(zeroKey, zeroValue interface{}) (*s3db.DB, func()) {
 		KeysLike:   "key",
 		ValuesLike: 1234,
 	}
-	s, err := s3db.Open(ctx, c, cfg, s3db.OpenOptions{}, time.Now())
+	s, err := kv.Open(ctx, c, cfg, kv.OpenOptions{}, time.Now())
 	if err != nil {
 		panic(err)
 	}

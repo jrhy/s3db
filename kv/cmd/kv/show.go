@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/jrhy/s3db"
+	"github.com/jrhy/s3db/kv"
 )
 
 func init() {
@@ -13,7 +13,7 @@ func init() {
 	subcommandUsage[cmd] = usage
 	subcommandDesc[cmd] = desc
 	subcommandFuncs[cmd] = func(sa *subcommandArgs) int {
-		db := open(sa.Ctx, &s3db.OpenOptions{ReadOnly: true}, sa)
+		db := open(sa.Ctx, &kv.OpenOptions{ReadOnly: true}, sa)
 		err := db.Diff(sa.Ctx, nil, sa.dump())
 		if err != nil {
 			fmt.Fprintln(sa.Stderr, err)

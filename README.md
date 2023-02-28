@@ -1,37 +1,102 @@
-# s3db: Serverless database and diffing for S3
-![Go](https://github.com/jrhy/s3db/workflows/Go/badge.svg)
-[![GoDoc](https://godoc.org/github.com/jrhy/s3db?status.svg)](https://godoc.org/github.com/jrhy/s3db)
+s3db is a SQLite extension that stores tables in an S3-compatible object store.
 
-s3db turns your S3 bucket into a database. You can also learn what changed
-since the last time you looked.  Now your database is also your event stream!
-🤯 
+Getting Started
+===============
 
-# Overview
-s3db is an opinionated modern serverless datastore built on diffing
-that integrates streaming, reduces dependencies and makes it natural
-to write distributed systems with fewer idempotency bugs.
+Check that your sqlite can load extensions. 
+```
+$ sqlite3
+SQLite version 3.41.0 2023-02-21 18:09:37
+Enter ".help" for usage hints.
+Connected to a transient in-memory database.
+Use ".open FILENAME" to reopen on a persistent database.
+sqlite> .dbconfig load_extension
+     load_extension on
+```
+If you see `load_extension off`, build yourself 
+[sqlite with default configuration](https://github.com/sqlite/sqlite).
 
-s3db makes it easy to put and get structured data in S3 from Go, AND 
-track changes.
-s3db doesn't depend on any services other than S3-compatible storage.
+```
+sqlite> .open mydb.sqlite
+sqlite> .load ./s3db
+sqlite> create virtual table mytable using s3db (
+```
+Specify columns with constraints like you would a regular CREATE TABLE.
+Note that, as yet, s3db only uses the column names and PRIMARY KEY;
+type affinity could be added later.
+```
+          columns='id PRIMARY KEY, name, email',
+```
+Specify the S3 parameters. You can omit the `s3_endpoint` if using AWS,
+or the `s3_prefix` if you don't plan to distinguish multiple tables in
+the same bucket.
+```
+          s3_bucket='mybucket',
+          s3_endpoint='https://my-s3-server-if-not-using-aws',
+          s3_prefix='mydb');
+sqlite> insert into mytable values (1,'jeff','********@rhyason.org');
+```
+Once created, tables remain part of the database and don't need to be recreated.
+Of course, they can be mixed with regular tables.
 
-s3db is on a mission to make it easier to build applications that can
-take advantage of the high availability and durability of object
-storage, while also being predictable and resilient in the face of failures,
-by leveraging immutable data and CRDTs to get the best from local-first
-and shared-nothing architectures.
+```
+$ sqlite3 mydb.sqlite -cmd '.load ./s3db'
+SQLite version 3.41.0 2023-02-21 18:09:37
+Enter ".help" for usage hints.
+sqlite> select * from mytable;
+┌────┬──────┬──────────────────────┐
+│ id │ name │        email         │
+├────┼──────┼──────────────────────┤
+│ 1  │ jeff │ ********@rhyason.org │
+└────┴──────┴──────────────────────┘
+```
 
-# Requirements
-- go1.14+
-- S3-compatible storage, like minio, Wasabi, or AWS
+CREATE VIRTUAL TABLE Options
+============================
+```
+ columns='<colname> [type] [primary key] [not null]',
+                                   columns and constraints
+ deadline='<N>[s,m,h,d]',          timeout operations if they take too long
+[s3_bucket='mybucket',]            defaults to in-memory bucket
+[s3_endpoint='https://minio.example.com',]
+                                   optional S3 endpoint (if not using AWS)
+[s3_prefix='/prefix',]             separate tables within a bucket
+[write_time='2006-01-02 15:04:05',]
+                                   value modification time, for idempotence, from request time
+```
 
-# Getting started
-[Guide](GETTINGSTARTED.md)
+Multiple Writers
+================
+Multiple writers can commit modifications from the same version.
+The next reader will automatically merge both new versions. If
+there are any conflicting rows, the winner is chosen by "last
+write wins", on a per-column basis. Additionally, for any row, a
+DELETE supersedes all UPDATEs with a later row modification time,
+until another INSERT for the same key. In order to facilitate this,
+deletions consume space until vacuumed.
 
-# Disambiguation
-* This s3db is NOT related to [Simple Sloppy Semantic Database](https://en.wikipedia.org/wiki/Simple_Sloppy_Semantic_Database) at s3db.org that predates Amazon S3.
+Each writer can set its `write_time` corresponding to the ideal
+time that the column values are to be affected, which can be useful
+for idempotence.
 
-# Links
-* Go package documentation [godoc.org/github.com/jrhy/s3db](https://godoc.org/github.com/jrhy/s3db)
-* Data structure [github.com/jrhy/mast](https://github.com/jrhy/mast)
+Building from Source
+====================
+Requires Go 1.19. 
+```
+go vet -tags sqlite_vtable ./...
+go test -tags sqlite_vtable ./...
+go generate ./sqlite
+```
+produces the extension as `sqlite/s3db.so` (or `sqlite/s3db.dylib` on MacOS). 
+
+Caveats
+=======
+* Each transaction may make a new version. Use the `s3db_vacuum()`
+function to free up space from versions older than a certain time, e.g.:
+```select * from s3db_vacuum('mytable', datetime('now','-7 days'))```
+* Using the extension inside Go programs requires the program be built with the Go build option `-linkshared`.
+Therefore this extension cannot be used in Go programs on MacOS due to lack of 
+support ( `-linkshared not supported on darwin/arm64`). A version that uses 
+[go-sqlite3](https://github.com/mattn/go-sqlite3) is possible--please
+signal any interest in an issue.
 

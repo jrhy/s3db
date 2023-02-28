@@ -1,4 +1,4 @@
-package s3db_test
+package kv_test
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/johannesboyne/gofakes3"
 	"github.com/johannesboyne/gofakes3/backend/s3mem"
 	"github.com/jrhy/mast"
-	"github.com/jrhy/s3db"
+	"github.com/jrhy/s3db/kv"
 )
 
 func s3Config(endpoint string) *aws.Config {
@@ -53,8 +53,8 @@ func Example() {
 
 	c := s3.New(session.New(s3cfg))
 
-	cfg := s3db.Config{
-		Storage: &s3db.S3BucketInfo{
+	cfg := kv.Config{
+		Storage: &kv.S3BucketInfo{
 			EndpointURL: c.Endpoint,
 			BucketName:  "bucket",
 			Prefix:      "/my-awesome-database",
@@ -62,9 +62,9 @@ func Example() {
 		KeysLike:      "key",
 		ValuesLike:    1234,
 		NodeCache:     mast.NewNodeCache(1024),
-		NodeEncryptor: s3db.V1NodeEncryptor([]byte("This is a secret passphrase if ever there was one.")),
+		NodeEncryptor: kv.V1NodeEncryptor([]byte("This is a secret passphrase if ever there was one.")),
 	}
-	s, err := s3db.Open(ctx, c, cfg, s3db.OpenOptions{}, time.Now())
+	s, err := kv.Open(ctx, c, cfg, kv.OpenOptions{}, time.Now())
 	if err != nil {
 		panic(err)
 	}

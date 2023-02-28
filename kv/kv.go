@@ -1,19 +1,4 @@
-// Package s3db turns your S3 bucket into a serverless database and lets you diff versions to track changes. 🤯
-//
-// s3db is an opinionated modern serverless datastore built on diffing
-// that integrates streaming, reduces dependencies and makes it natural
-// to write distributed systems with fewer idempotency bugs.
-//
-// s3db makes it easy to put and get structured data in S3 from Go, and
-// track changes.
-//
-// s3db doesn't depend on any services other than S3-compatible storage.
-//
-// s3db is on a mission to make it easier to build applications that can
-// take advantage of the high availability and durability of object
-// storage, while also being predictable and resilient in the face of failures,
-// by leveraging immutable data and CRDTs to get the best from local-first
-// and shared-nothing architectures.
+// Package kv turns your S3 bucket into a diffable serverless key-value store.
 //
 // # Requirements
 //
@@ -21,16 +6,10 @@
 //
 // - S3-compatible storage, like minio, Wasabi, or AWS
 //
-// # Disambiguation
-//
-// This s3db isn't related to the Simple Sloppy Semantic Database
-// (https://en.wikipedia.org/wiki/Simple_Sloppy_Semantic_Database) that
-// predates Amazon S3.
-//
 // # Links
 //
 // * Merkle Search Tree, https://github.com/jrhy/mast
-package s3db
+package kv
 
 import (
 	"context"
@@ -52,8 +31,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/jrhy/mast"
 	s3Persist "github.com/jrhy/mast/persist/s3"
-	crdtpub "github.com/jrhy/s3db/crdt"
-	"github.com/jrhy/s3db/internal/crdt"
+	crdtpub "github.com/jrhy/s3db/kv/crdt"
+	"github.com/jrhy/s3db/kv/internal/crdt"
 	"github.com/minio/blake2b-simd"
 )
 
@@ -80,7 +59,7 @@ type DB struct {
 	mergedRoots      map[string][]byte
 	unmergeableRoots int
 	tombstoned       bool
-	s3dbVersion      int
+	kvVersion        int
 }
 
 // Config defines how values are stored and (un)marshaled.
@@ -114,7 +93,7 @@ type Config struct {
 	// CustomUnmarshal, if using registered types, will be invoked
 	// to read tree nodes which are mast.PersistedNode with keys of
 	// KeysLike, and values of crdtpub.Value of ValuesLike. All of
-	// those should be registered before invoking s3db.Open().
+	// those should be registered before invoking kv.Open().
 	CustomUnmarshal              func([]byte, interface{}) error
 	UnmarshalUsesRegisteredTypes bool
 }
@@ -150,7 +129,7 @@ type OpenOptions struct {
 	ForceRebranch bool
 }
 
-// S3Interface is the subset of the AWS SDK for S3 that s3db uses to access compatible buckets
+// S3Interface is the subset of the AWS SDK for S3 used access compatible buckets
 type S3Interface interface {
 	// à la AWS SDK for S3
 	DeleteObjectWithContext(ctx aws.Context, input *s3.DeleteObjectInput, opts ...request.Option) (*s3.DeleteObjectOutput, error)
@@ -216,7 +195,7 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 	if cfg.OnConflictMerged != nil {
 		crdtConfig.OnConflictMerged = crdt.OnConflictMerged(cfg.OnConflictMerged)
 	}
-	var s3dbVersion int
+	var kvVersion int
 	if opts.SingleVersion != "" {
 		root, _, err := loadNamedRoot(ctx, rootPersist, mergedPersist, opts.SingleVersion)
 		if err != nil {
@@ -226,10 +205,10 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 		if err != nil {
 			return nil, fmt.Errorf("load: %w", err)
 		}
-		s3dbVersion = root.S3DBVersion
+		kvVersion = root.KVVersion
 	} else {
 		var err error
-		tree, mergedRoots, unmergeableRoots, err = mergeRoots(ctx, S3, cfg, crdtConfig, rootPersist, when, opts.ForceRebranch, &s3dbVersion)
+		tree, mergedRoots, unmergeableRoots, err = mergeRoots(ctx, S3, cfg, crdtConfig, rootPersist, when, opts.ForceRebranch, &kvVersion)
 		if err != nil {
 			return nil, fmt.Errorf("merge: %w", err)
 		}
@@ -243,7 +222,7 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 		merged:           mergedPersist,
 		cfg:              &cfg,
 		crdt:             *tree,
-		s3dbVersion:      s3dbVersion,
+		kvVersion:        kvVersion,
 		mergedRoots:      mergedRoots,
 		unmergeableRoots: unmergeableRoots,
 	}
@@ -352,8 +331,8 @@ func mergeRoots(
 			}
 			return nil, nil, 0, err
 		}
-		if root.S3DBVersion > *maxVersion {
-			*maxVersion = root.S3DBVersion
+		if root.KVVersion > *maxVersion {
+			*maxVersion = root.KVVersion
 		}
 		graft, err := crdt.Load(ctx, crdtConfig, &key, *root)
 		if err != nil {
@@ -417,7 +396,7 @@ func mergeRoots(
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("new root: %w", err)
 		}
-		*maxVersion = root.S3DBVersion
+		*maxVersion = root.KVVersion
 	} else {
 		if len(mergedRoots) == 1 {
 			tree.Source = getFirstKey(mergedRoots)
@@ -436,7 +415,7 @@ func emptyRoot(when time.Time, branchFactor uint, crdtConfig crdt.Config) crdt.R
 		empty.MergeMode = crdt.MergeModeCustomLWW
 	}
 	empty.NodeFormat = crdtConfig.MastNodeFormat
-	empty.S3DBVersion = 1
+	empty.KVVersion = 1
 	return empty
 }
 
@@ -469,9 +448,9 @@ func (s *DB) Commit(ctx context.Context) (*string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("mast makeroot: %w", err)
 	}
-	root.S3DBVersion = s.s3dbVersion
+	root.KVVersion = s.kvVersion
 	var rootBytes []byte
-	switch s.s3dbVersion {
+	switch s.kvVersion {
 	case 0:
 		rootBytes, err = marshalGob(root)
 		if err != nil {
@@ -483,7 +462,7 @@ func (s *DB) Commit(ctx context.Context) (*string, error) {
 			return nil, fmt.Errorf("marshal root: json: %w", err)
 		}
 	default:
-		return nil, fmt.Errorf("unhandled s3db version: %v", root.S3DBVersion)
+		return nil, fmt.Errorf("unhandled kv version: %v", root.KVVersion)
 	}
 
 	hashBytes := blake2b.Sum256(rootBytes)
@@ -541,15 +520,15 @@ func listObjects(ctx context.Context, c S3Interface, bucketName, prefix string) 
 // Clone returns an independent database, with the same entries and uncommitted values as its
 // source. Clones don't duplicate nodes that can be shared.
 func (s *DB) Clone(ctx context.Context) (*DB, error) {
-	s3dbCopy := *s
+	kvCopy := *s
 	cfgCopy := *s.cfg
-	s3dbCopy.cfg = &cfgCopy
+	kvCopy.cfg = &cfgCopy
 	crdtCopy, err := s.crdt.Clone(ctx)
 	if err != nil {
 		return nil, err
 	}
-	s3dbCopy.crdt = *crdtCopy
-	return &s3dbCopy, nil
+	kvCopy.crdt = *crdtCopy
+	return &kvCopy, nil
 }
 
 // Cancel indicates you don't want any of the previously-set entries persisted.

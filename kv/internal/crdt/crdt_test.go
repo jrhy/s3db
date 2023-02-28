@@ -147,7 +147,7 @@ func TestFile(t *testing.T) {
 	gob.Register(MyObject{})
 
 	forEachMarshaler(t, func(t *testing.T, cfg Config) {
-		dir, err := ioutil.TempDir("", "s3dbtest")
+		dir, err := ioutil.TempDir("", "kvtest")
 		require.NoError(t, err)
 
 		persist := file.NewPersistForPath(dir)

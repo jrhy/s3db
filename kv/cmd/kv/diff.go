@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/jrhy/s3db"
+	"github.com/jrhy/s3db/kv"
 )
 
 func init() {
@@ -19,7 +19,7 @@ func init() {
 			return 1
 		}
 		fromVersion := sa.Arg[0]
-		from := open(sa.Ctx, &s3db.OpenOptions{
+		from := open(sa.Ctx, &kv.OpenOptions{
 			SingleVersion: fromVersion,
 			ReadOnly:      true,
 		}, sa)
@@ -27,7 +27,7 @@ func init() {
 		if al > 1 {
 			toVersion = sa.Arg[1]
 		}
-		to := open(sa.Ctx, &s3db.OpenOptions{
+		to := open(sa.Ctx, &kv.OpenOptions{
 			SingleVersion: toVersion,
 			ReadOnly:      true,
 		}, sa)

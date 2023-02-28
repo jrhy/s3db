@@ -1,4 +1,4 @@
-package s3db
+package kv
 
 import (
 	"bytes"
@@ -20,7 +20,7 @@ import (
 	"github.com/jrhy/mast"
 	s3Persist "github.com/jrhy/mast/persist/s3"
 	"github.com/jrhy/mast/persist/s3test"
-	"github.com/jrhy/s3db/internal/crdt"
+	"github.com/jrhy/s3db/kv/internal/crdt"
 	"github.com/minio/blake2b-simd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/jrhy/mast"
-	"github.com/jrhy/s3db/crdt"
+	"github.com/jrhy/s3db/kv/crdt"
 )
 
 type Tree struct {
@@ -28,7 +28,7 @@ type Root struct {
 	Created      *time.Time `json:"cr,omitempty"`
 	MergeSources []string   `json:"p,omitempty"`
 	MergeMode    int        `json:"mm,omitempty"`
-	S3DBVersion  int        `json:"s3db_version,omitempty"`
+	KVVersion    int        `json:"kv_version,omitempty"`
 }
 
 const (
