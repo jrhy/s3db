@@ -1,6 +1,6 @@
 //go:build sqlite_vtable
 
-package main
+package sqlite3
 
 import (
 	"database/sql"

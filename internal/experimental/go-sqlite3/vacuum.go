@@ -1,4 +1,4 @@
-package main
+package sqlite3
 
 import (
 	"errors"
