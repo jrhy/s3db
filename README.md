@@ -26,18 +26,30 @@ Note that, as yet, s3db only uses the column names and PRIMARY KEY;
 type affinity could be added later.
 ```
           columns='id PRIMARY KEY, name, email',
+...
 ```
 Specify the S3 parameters. You can omit the `s3_endpoint` if using AWS,
 or the `s3_prefix` if you don't plan to distinguish multiple tables in
 the same bucket.
 ```
+...
           s3_bucket='mybucket',
           s3_endpoint='https://my-s3-server-if-not-using-aws',
-          s3_prefix='mydb');
-sqlite> insert into mytable values (1,'jeff','********@rhyason.org');
+          s3_prefix='mydb',
+...
+```
+We are willing to cache 1000 nodes in memory.
+```
+...
+          node_cache_entries=1000);
 ```
 Once created, tables remain part of the database and don't need to be recreated.
 Of course, they can be mixed with regular tables.
+
+Now we can add some data:
+```
+sqlite> insert into mytable values (1,'jeff','********@rhyason.org');
+```
 
 ```
 $ sqlite3 mydb.sqlite -cmd '.load ./s3db'
@@ -54,9 +66,11 @@ sqlite> select * from mytable;
 CREATE VIRTUAL TABLE Options
 ============================
 ```
- columns='<colname> [type] [primary key] [not null]',
+ columns='<colname> [type] [primary key] [not null], ...',
                                    columns and constraints
  deadline='<N>[s,m,h,d]',          timeout operations if they take too long
+ entries_per_node=<N>,             the number of rows to store in per S3 object
+ node_cache_entries=<N>,           number of nodes to cache in memory
 [s3_bucket='mybucket',]            defaults to in-memory bucket
 [s3_endpoint='https://minio.example.com',]
                                    optional S3 endpoint (if not using AWS)

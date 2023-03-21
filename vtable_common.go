@@ -111,6 +111,8 @@ usage:
  columns='<colname> [type] [primary key] [not null]',
                                    columns and constraints
  deadline='<N>[s,m,h,d]',          timeout operations if they take too long
+ entries_per_node=<N>,             the number of rows to store in per S3 object
+ node_cache_entries=<N>,           number of nodes to cache in memory
 [s3_bucket='mybucket',]            defaults to in-memory bucket
 [s3_endpoint='https://minio.example.com',]
                                    optional S3 endpoint (if not using AWS)

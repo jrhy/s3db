@@ -25,11 +25,16 @@ ENV=\
 	AWS_REGION=dummy \
 	S3_ENDPOINT='http://127.0.0.1:9091'
 
-run: all
-	export ${ENV} ; sqlite3 \
+run: all scratch.sqlite
+	export ${ENV} ; sqlite3 scratch.sqlite \
+		-cmd '.load ./s3db'
+
+scratch.sqlite:
+	export ${ENV} ; sqlite3 scratch.sqlite \
 		-cmd '.load ./s3db' \
-		-cmd "create virtual table scratch using s3db \
-		   (s3_bucket='mybucket', \
+		"create virtual table if not exists scratch using s3db \
+		   (node_cache_entries=1000, \
+		    s3_bucket='mybucket', \
 		    s3_endpoint='$$S3_ENDPOINT', \
 		    s3_prefix='scratch', \
 		    columns='a PRIMARY KEY, b')"
