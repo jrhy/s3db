@@ -30,7 +30,8 @@ type affinity could be added later.
 ```
 Specify the S3 parameters. You can omit the `s3_endpoint` if using AWS,
 or the `s3_prefix` if you don't plan to distinguish multiple tables in
-the same bucket.
+the same bucket. Omit everything if you just want to fiddle with a
+temporary bucket.
 ```
 ...
           s3_bucket='mybucket',

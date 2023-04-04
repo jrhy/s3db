@@ -1,6 +1,6 @@
 
 all:
-	go generate
+	CGO_ENABLED=1 go generate
 
 start-minio:
 	if ! which minio ; then \
