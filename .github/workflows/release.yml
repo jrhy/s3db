@@ -23,7 +23,7 @@ jobs:
           mkdir release
           cd sqlite
           go generate
-          mv s3db.so ../release/s3db-${{ github.ref_name }}-linux-amd64.so
+          mv s3db.so ../release/s3db-${{ github.ref_name }}-linux-amd64.sqlite-ext.so
           cd ../release
           gzip -9 s3db-${{ github.ref_name }}-linux-amd64.sqlite-ext.so
 
