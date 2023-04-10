@@ -3,17 +3,17 @@ module github.com/jrhy/s3db
 go 1.19
 
 require (
-	github.com/aws/aws-sdk-go v1.44.205
+	github.com/aws/aws-sdk-go v1.44.239
 	github.com/bufbuild/buf v1.17.0
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
-	github.com/johannesboyne/gofakes3 v0.0.0-20230129080941-f6a8a9ae6fd3
+	github.com/johannesboyne/gofakes3 v0.0.0-20230310080033-c0edf658332b
 	github.com/johncgriffin/overflow v0.0.0-20211019200055-46fa312c352c
 	github.com/jrhy/mast v1.2.21
 	github.com/mattn/go-sqlite3 v1.14.16
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/segmentio/ksuid v1.0.4
 	github.com/stretchr/testify v1.8.2
-	go.riyazali.net/sqlite v0.0.0-20221229061135-0e640ca73f94
+	go.riyazali.net/sqlite v0.0.0-20230320080028-80a51d3944c0
 	golang.org/x/crypto v0.8.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 	google.golang.org/protobuf v1.30.0
