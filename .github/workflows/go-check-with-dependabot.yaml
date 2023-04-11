@@ -24,6 +24,8 @@ jobs:
 
     - name: Check out code into the Go module directory
       uses: actions/checkout@v3
+      with:
+        persist-credentials: false
 
     - name: Get dependencies
       run: |
@@ -44,6 +46,8 @@ jobs:
     steps:
     - name: checkout
       uses: actions/checkout@v3
+      with:
+        persist-credentials: false
     - name: Set up Go 1.x
       uses: actions/setup-go@v4
       with:
@@ -84,6 +88,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Auto-merge Dependabot PRs
         # Find the PR number based on the current branch name, and squash merge based on this number
