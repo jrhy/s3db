@@ -50,7 +50,7 @@ jobs:
         uses: "marvinpinto/action-automatic-releases@v1.2.1"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: null
+          automatic_release_tag: ${{ needs.tag.outputs.tag }}
           prerelease: false
           files: |
             release/s3db-${{ needs.tag.outputs.tag }}-linux-amd64.sqlite-ext.so.gz
