@@ -1,11 +1,11 @@
-# example 2: on merge to master
+# example 2: on merge to main
 name: Bump version
 on:
   pull_request:
     types:
       - closed
     branches:
-      - master
+      - main
 jobs:
   build:
     runs-on: ubuntu-latest
