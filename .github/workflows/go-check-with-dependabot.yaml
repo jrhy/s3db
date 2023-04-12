@@ -93,10 +93,6 @@ jobs:
 
       - name: Auto-merge Dependabot PRs
         # Find the PR number based on the current branch name, and squash merge based on this number
-        run: |
-          git branch
-          git branch --show-current
-          PR_NUM="$(gh pr list | grep $(git branch --show-current) | cut -f1)"
-          gh pr merge --auto --squash $PR_NUM
+        run: 'PR_NUM="$(gh pr list | grep ${{ github.ref_name }} | cut -f1)"; gh pr merge --auto --squash $PR_NUM'
         env:
           GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
