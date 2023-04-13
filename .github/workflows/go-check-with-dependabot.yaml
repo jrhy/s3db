@@ -79,6 +79,7 @@ jobs:
 
   automerge_dependabot:
     runs-on: ubuntu-latest
+    if: ${{ github.actor == 'dependabot[bot]' }}
 
     # Only run if the required checks pass
     needs: [build, go_generate, go_mod_tidy]
@@ -88,5 +89,5 @@ jobs:
       uses: actions/checkout@v3
     - uses: ahmadnassri/action-dependabot-auto-merge@v2
       with:
-        target: patch
-        github-token: ${{ secrets.mytoken }}
+        target: minor
+        github-token: ${{ secrets.GITHUB_TOKEN }}
