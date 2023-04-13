@@ -77,22 +77,16 @@ jobs:
         echo
         git diff --name-only --exit-code || (echo "Please run 'go mod tidy'."; exit 1)
 
-  dependabot:
+  automerge_dependabot:
     runs-on: ubuntu-latest
-    # Only run this job for dependabot PRs
-    if: ${{ github.actor == 'dependabot[bot]' }}
 
     # Only run if the required checks pass
     needs: [build, go_generate, go_mod_tidy]
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Auto-merge Dependabot PRs
-        # Find the PR number based on the current branch name, and squash merge based on this number
-        run: 'PR_NUM="$(gh pr list | grep ${{ github.ref_name }} | cut -f1)"; gh pr merge --auto --squash $PR_NUM'
-        env:
-          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+    - name: checkout
+      uses: actions/checkout@v3
+    - uses: ahmadnassri/action-dependabot-auto-merge@v2
+      with:
+        target: patch
+        github-token: ${{ secrets.mytoken }}
