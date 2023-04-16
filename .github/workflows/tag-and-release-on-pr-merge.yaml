@@ -43,7 +43,7 @@ jobs:
           mkdir release
           cd sqlite
           go generate && mv s3db.so ../release/s3db-${{ needs.tag.outputs.tag }}-linux-amd64-glibc.sqlite-ext.so
-          CGO_ENABLED=1 GOOS=linux GOARCH=arm CC="zig cc -target arm-linux-glibc" go generate && mv s3db.so ../release/s3db-${{ needs.tag.outputs.tag }}-linux-arm-glibc.sqlite-ext.so
+          CGO_ENABLED=1 GOOS=linux GOARCH=arm CC="zig cc -target arm-linux-gnueabihf" go generate && mv s3db.so ../release/s3db-${{ needs.tag.outputs.tag }}-linux-arm-glibc.sqlite-ext.so
           cd ../release
           gzip -9 *
 
@@ -55,6 +55,6 @@ jobs:
           automatic_release_tag: ${{ needs.tag.outputs.tag }}
           prerelease: false
           files: |
-            release/s3db-${{ needs.tag.outputs.tag }}-linux-arm-glibc.sqlite-ext.so.gz
             release/s3db-${{ needs.tag.outputs.tag }}-linux-amd64-glibc.sqlite-ext.so.gz
+            release/s3db-${{ needs.tag.outputs.tag }}-linux-arm-glibc.sqlite-ext.so.gz
 
