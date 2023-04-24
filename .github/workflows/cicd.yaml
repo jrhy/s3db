@@ -33,6 +33,17 @@ jobs:
       env:
         PR_URL: ${{github.event.pull_request.html_url}}
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+    - name: Tag new releases
+      if: ${{ ((github.ref == 'refs/heads/main') && (github.event_name == 'push')) || (
+        (github.event.pull_request.user.login == 'dependabot[bot]') && 
+        (steps.dependabot-metadata.outputs.update-type == 'version-update:semver-major' && steps.dependabot-metadata.outputs.dependency-type == 'direct:development') ||
+          (steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch') || (steps.dependabot-metadata.outputs.update-type == 'version-update:semver-minor')) }}
+      id: tag
+      uses: anothrNick/github-tag-action@1.61.0 # Don't use @master unless you're happy to test the latest version
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        DEFAULT_BUMP: patch
+        WITH_V: true
     - name: Approve patch and minor updates for Dependabot PRs
       if: ${{ (github.event.pull_request.user.login == 'dependabot[bot]') &&
           ((steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch') || (steps.dependabot-metadata.outputs.update-type == 'version-update:semver-minor')) }}
@@ -56,17 +67,6 @@ jobs:
       env:
         PR_URL: ${{github.event.pull_request.html_url}}
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-    - name: Tag new releases
-      if: ${{ ((github.ref == 'refs/heads/main') && (github.event_name == 'push')) || (
-        (github.event.pull_request.user.login == 'dependabot[bot]') && 
-        (steps.dependabot-metadata.outputs.update-type == 'version-update:semver-major' && steps.dependabot-metadata.outputs.dependency-type == 'direct:development') ||
-          (steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch') || (steps.dependabot-metadata.outputs.update-type == 'version-update:semver-minor')) }}
-      id: tag
-      uses: anothrNick/github-tag-action@1.61.0 # Don't use @master unless you're happy to test the latest version
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        DEFAULT_BUMP: patch
-        WITH_V: true
     - name: add version number to release files
       if: ${{ ((github.ref == 'refs/heads/main') && (github.event_name == 'push')) || (
         (github.event.pull_request.user.login == 'dependabot[bot]') && 
