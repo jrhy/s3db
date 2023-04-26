@@ -1,0 +1,11 @@
+on:
+  push:
+    branches: [ fiddle ]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    name: Release
+    steps:
+    - run: echo ${{ secrets.DEPENDABOT_PUSH_TOKEN }} | wc -c 
+
