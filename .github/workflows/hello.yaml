@@ -7,5 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Hello
     steps:
-    - run: echo ${{ secrets.DEPENDABOT_PUSH_TOKEN }} | wc -c 
+    - run: gh pr list
+      env:
+        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
