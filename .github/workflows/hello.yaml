@@ -7,6 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Hello
     steps:
+    - uses: actions/checkout@v3
     - run: gh pr list
       env:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
