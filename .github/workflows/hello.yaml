@@ -1,5 +1,5 @@
 on:
-  push:
+  pull_request:
     branches: [ fiddle ]
 
 jobs:
@@ -8,7 +8,8 @@ jobs:
     name: Hello
     steps:
     - uses: actions/checkout@v3
-    - run: gh pr list
+    - run: gh pr comment $PR_URL --body "yay!")
       env:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        PR_URL: ${{github.event.pull_request.html_url}}
 
