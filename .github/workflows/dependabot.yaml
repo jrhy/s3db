@@ -25,28 +25,21 @@ jobs:
       if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
       run: gh pr merge --auto --rebase "$PR_URL"
       env:
+        GITHUB_TOKEN: ${{ secrets.DEPENDABOT_PUSH_TOKEN }}
         PR_URL: ${{github.event.pull_request.html_url}}
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
     - name: Approve patch and minor updates for Dependabot PRs
       if: ${{ (github.event.pull_request.user.login == 'dependabot[bot]') &&
           ((steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch') || (steps.dependabot-metadata.outputs.update-type == 'version-update:semver-minor')) }}
-
-      run: gh api \
-  --method POST \
-  -H "Accept: application/vnd.github+json" \
-  "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
-  -f event='APPROVE'
+      run: |
+        gh api --method POST -H 'Accept: application/vnd.github+json' '/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews' -f event='APPROVE'
       env:
         GH_TOKEN: ${{ secrets.DEPENDABOT_PUSH_TOKEN }}
         PR_NUMBER: ${{github.event.pull_request.number}}
     - name: Approve major updates of development dependencies for Dependabot PRs
       if: ${{ (github.event.pull_request.user.login == 'dependabot[bot]') &&
           (steps.dependabot-metadata.outputs.update-type == 'version-update:semver-major') && (steps.dependabot-metadata.outputs.dependency-type == 'direct:development') }}
-      run: gh api \
-  --method POST \
-  -H "Accept: application/vnd.github+json" \
-  "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
-  -f event='APPROVE'
+      run: |
+        gh api --method POST -H 'Accept: application/vnd.github+json' '/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews' -f event='APPROVE'
       env:
         GH_TOKEN: ${{ secrets.DEPENDABOT_PUSH_TOKEN }}
         PR_NUMBER: ${{github.event.pull_request.number}}
