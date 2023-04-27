@@ -25,7 +25,7 @@ jobs:
       if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
       run: gh pr merge --auto --rebase "$PR_URL"
       env:
-        GITHUB_TOKEN: ${{ secrets.DEPENDABOT_PUSH_TOKEN }}
+        GH_TOKEN: ${{ secrets.DEPENDABOT_PUSH_TOKEN }}
         PR_URL: ${{github.event.pull_request.html_url}}
     - name: Approve patch and minor updates for Dependabot PRs
       if: ${{ (github.event.pull_request.user.login == 'dependabot[bot]') &&
