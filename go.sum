@@ -6,8 +6,8 @@ github.com/Microsoft/go-winio v0.6.1/go.mod h1:LRdKpFKfdobln8UmuiYcKPot9D2v6svN5
 github.com/aws/aws-sdk-go v1.33.0/go.mod h1:5zCpMtNQVjRREroY7sYe8lOMRSxkhG6MZveU8YkpAk0=
 github.com/aws/aws-sdk-go v1.44.205/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
 github.com/aws/aws-sdk-go v1.44.256/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
-github.com/aws/aws-sdk-go v1.44.263 h1:Dkt5fcdtL8QtK3cz0bOTQ84m9dGx+YDeTsDl+wY2yW4=
-github.com/aws/aws-sdk-go v1.44.263/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
+github.com/aws/aws-sdk-go v1.44.264 h1:5klL62ebn6uv3oJ0ixF7K12hKItj8lV3QqWeQPlkFSs=
+github.com/aws/aws-sdk-go v1.44.264/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
 github.com/benbjohnson/clock v1.3.3 h1:g+rSsSaAzhHJYcIQE78hJ3AhyjjtQvleKDjlhdBnIhc=
 github.com/bufbuild/buf v1.18.0 h1:21VUsBACeRLwJ+7XfzCc8z173M4iH8shcKDO7ASwp7A=
 github.com/bufbuild/buf v1.18.0/go.mod h1:Wp6mb9HCLDPI1woVCZux154AA0y8aLiPM+fr7Qufmto=
