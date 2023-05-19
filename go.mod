@@ -12,7 +12,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.16
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/segmentio/ksuid v1.0.4
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.8.3
 	go.riyazali.net/sqlite v0.0.0-20230320080028-80a51d3944c0
 	golang.org/x/crypto v0.9.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
