@@ -106,16 +106,17 @@ func New(args []string) (*VirtualTable, error) {
 	dbg("CONNECT\n")
 	table.Ctx = context.Background()
 	if len(args) == 0 {
+		// columns='<colname> [type] [primary key] [not null], ...',
 		return nil, errors.New(`
 usage:
- columns='<colname> [type] [primary key] [not null]',
+ columns='<colname> [primary key], ...',
                                    columns and constraints
- deadline='<N>[s,m,h,d]',          timeout operations if they take too long
- entries_per_node=<N>,             the number of rows to store in per S3 object
- node_cache_entries=<N>,           number of nodes to cache in memory
+[deadline='<N>[s,m,h,d]',]         timeout operations if they take too long (defaults to forever)
+[entries_per_node=<N>,]            the number of rows to store in per S3 object (defaults to 4096)
+[node_cache_entries=<N>,]          number of nodes to cache in memory (defaults to 0)
 [s3_bucket='mybucket',]            defaults to in-memory bucket
 [s3_endpoint='https://minio.example.com',]
-                                   optional S3 endpoint (if not using AWS)
+                                   S3 endpoint, if not using AWS
 [s3_prefix='/prefix',]             separate tables within a bucket
 [write_time='2006-01-02 15:04:05',]
                                    value modification time, for idempotence, from request time`)
