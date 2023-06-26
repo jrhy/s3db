@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/aws/aws-sdk-go v1.44.289
-	github.com/bufbuild/buf v1.21.0
+	github.com/bufbuild/buf v1.22.0
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/johannesboyne/gofakes3 v0.0.0-20230506070712-04da935ef877
 	github.com/johncgriffin/overflow v0.0.0-20211019200055-46fa312c352c
@@ -23,6 +23,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/bufbuild/connect-go v1.8.0 // indirect
+	github.com/bufbuild/connect-opentelemetry-go v0.3.0 // indirect
 	github.com/bufbuild/protocompile v0.5.1 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
