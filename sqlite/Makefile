@@ -19,18 +19,18 @@ start-minio:
 		mc ls mys3db/mybucket || mc mb mys3db/mybucket ; \
 		fi
 
-ENV=\
+MINIO_ENV=\
 	AWS_ACCESS_KEY_ID=minioadmin \
 	AWS_SECRET_ACCESS_KEY=miniopassword \
 	AWS_REGION=dummy \
 	S3_ENDPOINT='http://127.0.0.1:9091'
 
 run: all scratch.sqlite
-	export ${ENV} ; sqlite3 scratch.sqlite \
+	export ${MINIO_ENV} ; sqlite3 scratch.sqlite \
 		-cmd '.load ./s3db'
 
 scratch.sqlite:
-	export ${ENV} ; sqlite3 scratch.sqlite \
+	export ${MINIO_ENV} ; sqlite3 scratch.sqlite \
 		-cmd '.load ./s3db' \
 		"create virtual table if not exists scratch using s3db \
 		   (node_cache_entries=1000, \
@@ -40,5 +40,8 @@ scratch.sqlite:
 		    columns='a PRIMARY KEY, b')"
 
 test: all
-	export ${ENV} ; go test -v
+	export AWS_ACCESS_KEY_ID=masts3test \
+		AWS_SECRET_ACCESS_KEY=masts3test \
+		AWS_REGION=dummy ; \
+		go test -v
 
