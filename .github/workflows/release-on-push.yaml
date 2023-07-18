@@ -28,6 +28,7 @@ jobs:
       run: |
           mv release/s3db-linux-amd64-glibc.sqlite-ext.so.gz release/s3db-${{ steps.tag.outputs.tag }}-linux-amd64-glibc.sqlite-ext.so.gz
           mv release/s3db-linux-arm-glibc.sqlite-ext.so.gz release/s3db-${{ steps.tag.outputs.tag }}-linux-arm-glibc.sqlite-ext.so.gz
+          mv release/s3db-linux-arm64-glibc.sqlite-ext.so.gz release/s3db-${{ steps.tag.outputs.tag }}-linux-arm64-glibc.sqlite-ext.so.gz
     - name: Create Release
       uses: "marvinpinto/action-automatic-releases@v1.2.1"
       with:
