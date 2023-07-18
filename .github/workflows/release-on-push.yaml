@@ -38,4 +38,5 @@ jobs:
         files: |
           release/s3db-${{ steps.tag.outputs.tag }}-linux-amd64-glibc.sqlite-ext.so.gz
           release/s3db-${{ steps.tag.outputs.tag }}-linux-arm-glibc.sqlite-ext.so.gz
+          release/s3db-${{ steps.tag.outputs.tag }}-linux-arm64-glibc.sqlite-ext.so.gz
 
