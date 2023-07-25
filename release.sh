@@ -23,13 +23,14 @@ which zig || ( cd /tmp && curl -LO https://ziglang.org/download/0.9.1/zig-linux-
 which qemu-arm || ( sudo apt-get -y update && sudo apt-get -y install qemu-user libc6-armhf-cross libc6-arm64-cross libc6-amd64-cross )
 
 # cross-compile extensions
-cd sqlite
-CGO_ENABLED=1 GOOS=linux GOARCH=arm CC="zig cc -target arm-linux-gnueabihf" go generate && mv s3db.so ../release/s3db-linux-arm-glibc.sqlite-ext.so
-CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux-gnu" go generate && mv s3db.so ../release/s3db-linux-arm64-glibc.sqlite-ext.so
-CGO_ENABLED=1 GOOS=linux GOARCH=amd64 CC="zig cc -target x86_64-linux-gnu" go generate && mv s3db.so ../release/s3db-linux-amd64-glibc.sqlite-ext.so
-#segfaults CGO_ENABLED=1 GOOS=linux GOARCH=386 GO386=sse2 CC="zig cc -target x86-linux-gnu" go generate && mv s3db.so ../release/s3db-linux-386-glibc.sqlite-ext.so
+cd sqlite/sharedlib
+CGO_ENABLED=1 GOOS=linux GOARCH=arm CC="zig cc -target arm-linux-gnueabihf" go generate && mv s3db.so ../../release/s3db-linux-arm-glibc.sqlite-ext.so
+CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="zig cc -target aarch64-linux-gnu" go generate && mv s3db.so ../../release/s3db-linux-arm64-glibc.sqlite-ext.so
+CGO_ENABLED=1 GOOS=linux GOARCH=amd64 CC="zig cc -target x86_64-linux-gnu" go generate && mv s3db.so ../../release/s3db-linux-amd64-glibc.sqlite-ext.so
+#segfaults CGO_ENABLED=1 GOOS=linux GOARCH=386 GO386=sse2 CC="zig cc -target x86-linux-gnu" go generate && mv s3db.so ../../release/s3db-linux-386-glibc.sqlite-ext.so
 #ld.lld: error: .cache/zig/o/e51b22516508da4ed5a02967b5ed4c8c/_cgo_export.o is incompatible with elf32_x86_64
-#CGO_ENABLED=1 GOOS=linux GOARCH=386 CC="zig cc -target x86_64-linux-gnux32" go generate && mv s3db.so ../release/s3db-linux-386-glibc.sqlite-ext.so
+#CGO_ENABLED=1 GOOS=linux GOARCH=386 CC="zig cc -target x86_64-linux-gnux32" go generate && mv s3db.so ../../release/s3db-linux-386-glibc.sqlite-ext.so
+cd ../..
 
 # cross-compile sqlite
 if ! [ -f /tmp/sqlite-amalgamation-3420000/sqlite-arm ] ; then
@@ -45,10 +46,10 @@ fi
 
 # verify each target can load the extension
 set +o pipefail
-( qemu-arm -L /usr/arm-linux-gnueabihf/ /tmp/sqlite-amalgamation-3420000/sqlite-arm -bail -cmd ".load ../release/s3db-linux-arm-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for arm ; exit 1 )
-( qemu-aarch64 -L /usr/aarch64-linux-gnu/ /tmp/sqlite-amalgamation-3420000/sqlite-arm64 -bail -cmd ".load ../release/s3db-linux-arm64-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for arm64 ; exit 1 )
-( qemu-x86_64 -L /usr/x86_64-linux-gnu/ /tmp/sqlite-amalgamation-3420000/sqlite-amd64 -bail -cmd ".load ../release/s3db-linux-amd64-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for amd64 ; exit 1 )
+( qemu-arm -L /usr/arm-linux-gnueabihf/ /tmp/sqlite-amalgamation-3420000/sqlite-arm -bail -cmd ".load release/s3db-linux-arm-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for arm ; exit 1 )
+( qemu-aarch64 -L /usr/aarch64-linux-gnu/ /tmp/sqlite-amalgamation-3420000/sqlite-arm64 -bail -cmd ".load release/s3db-linux-arm64-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for arm64 ; exit 1 )
+( qemu-x86_64 -L /usr/x86_64-linux-gnu/ /tmp/sqlite-amalgamation-3420000/sqlite-amd64 -bail -cmd ".load release/s3db-linux-amd64-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for amd64 ; exit 1 )
 
-cd ../release
+cd release
 gzip -9 *
 

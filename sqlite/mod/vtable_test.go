@@ -2,7 +2,7 @@
 
 // +build !darwin
 
-package main_test
+package mod_test
 
 import (
 	"database/sql"
