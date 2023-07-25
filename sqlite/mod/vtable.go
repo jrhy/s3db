@@ -1,4 +1,4 @@
-package main
+package mod
 
 import (
 	"errors"
@@ -9,8 +9,6 @@ import (
 	"github.com/jrhy/s3db"
 	"github.com/jrhy/s3db/kv"
 )
-
-//go:generate sh -c "go build -buildmode=c-shared -o `if [ \"$GOOS\" = \"darwin\" ] ; then echo s3db.dylib ; else echo s3db.so ; fi`"
 
 type Module struct{}
 
@@ -186,9 +184,6 @@ func init() {
 		return sqlite.SQLITE_OK, nil
 	})
 }
-
-// placeholder for c-shared
-func main() {}
 
 func valuesToGo(values []sqlite.Value) map[int]interface{} {
 	res := make(map[int]interface{}, len(values))
