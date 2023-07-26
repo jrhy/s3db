@@ -100,9 +100,9 @@ Requires Go >=1.19.
 ```
 go vet ./...
 go test ./...
-go generate ./sqlite
+go generate ./sqlite/sharedlib
 ```
-produces the extension as `sqlite/s3db.so` (or `sqlite/s3db.dylib` on MacOS). 
+produces the extension as `sqlite/sharedlib/s3db.so` (or `sqlite/sharedlib/s3db.dylib` on MacOS).
 
 Caveats
 =======
