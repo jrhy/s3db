@@ -96,10 +96,10 @@ for idempotence.
 
 Building from Source
 ====================
-Requires Go 1.19. 
+Requires Go >=1.19. 
 ```
-go vet -tags sqlite_vtable ./...
-go test -tags sqlite_vtable ./...
+go vet ./...
+go test ./...
 go generate ./sqlite
 ```
 produces the extension as `sqlite/s3db.so` (or `sqlite/s3db.dylib` on MacOS). 
@@ -109,9 +109,6 @@ Caveats
 * Each transaction may make a new version. Use the `s3db_vacuum()`
 function to free up space from versions older than a certain time, e.g.:
 ```select * from s3db_vacuum('mytable', datetime('now','-7 days'))```
-* Using the extension inside Go programs requires the program be built with the Go build option `-linkshared`.
-Therefore this extension cannot be used in Go programs on MacOS due to lack of 
-support ( `-linkshared not supported on darwin/arm64`). A version that uses 
-[go-sqlite3](https://github.com/mattn/go-sqlite3) is possible--please
-signal any interest in an issue.
+* Using the extension inside Go programs is best done using `github.com/jrhy/s3db/sqlite/mod`.
+See [sqlite/example-go-app/](sqlite/example-go-app/) for an example. 
 
