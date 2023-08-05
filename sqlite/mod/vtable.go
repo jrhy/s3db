@@ -173,13 +173,21 @@ func init() {
 		if err != nil {
 			return sqlite.SQLITE_ERROR, err
 		}
+		err = api.CreateModule("s3db_roots", &RootsModule{},
+			func(opts *sqlite.ModuleOptions) {
+				opts.ReadOnly = true
+				opts.EponymousOnly = true
+			})
+		if err != nil {
+			return sqlite.SQLITE_ERROR, fmt.Errorf("s3db_roots: %w", err)
+		}
 		err = api.CreateModule("s3db_vacuum", &VacuumModule{},
 			func(opts *sqlite.ModuleOptions) {
 				opts.ReadOnly = true
 				opts.EponymousOnly = true
 			})
 		if err != nil {
-			return sqlite.SQLITE_ERROR, err
+			return sqlite.SQLITE_ERROR, fmt.Errorf("s3db_vacuum: %w", err)
 		}
 		return sqlite.SQLITE_OK, nil
 	})

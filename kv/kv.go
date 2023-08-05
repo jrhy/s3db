@@ -59,7 +59,7 @@ type DB struct {
 	mergedRoots      map[string][]byte
 	unmergeableRoots int
 	tombstoned       bool
-	kvVersion        int
+	kvVersion        int // crdt.Root.KVVersion, root format version (0, 1)
 }
 
 // Config defines how values are stored and (un)marshaled.
@@ -981,4 +981,19 @@ func (c *Cursor) Get() (interface{}, *crdtpub.Value, bool) {
 	}
 	v := innerValue.(crdtpub.Value)
 	return innerKey, &v, true
+}
+
+func (s *DB) Roots() ([]string, error) {
+	if !s.readonly && s.IsDirty() {
+		return nil, errors.New("db has uncommitted values")
+	}
+	i := 0
+	var roots []string
+	for k := range s.mergedRoots {
+		if k != "" {
+			roots = append(roots, k)
+		}
+		i++
+	}
+	return roots, nil
 }
