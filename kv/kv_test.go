@@ -1571,3 +1571,35 @@ func TestStatefulMarshalingEfficiency(t *testing.T) {
 	// t.Logf("with statefun marshaling: %d", v1Usage)
 	require.Less(t, v1Usage, v115Usage)
 }
+
+func TestRoots(t *testing.T) {
+	if s3test.CanParallelize() {
+		t.Parallel()
+	}
+	s, c, cfg, tm, closer := createTestTree("roots", "a", 1)
+	defer closer()
+	_, err := s.Commit(ctx)
+	require.NoError(t, err)
+
+	left, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	require.NoError(t, left.Set(ctx, tm.next(), "b", 2))
+
+	right, err := Open(ctx, c, cfg, OpenOptions{}, tm.next())
+	require.NoError(t, err)
+	require.NoError(t, right.Set(ctx, tm.next(), "c", 3))
+
+	leftVersion, err := left.Commit(ctx)
+	require.NoError(t, err)
+	rightVersion, err := right.Commit(ctx)
+	require.NoError(t, err)
+
+	multipleRoots, err := Open(ctx, c, cfg, OpenOptions{ReadOnly: true}, tm.next())
+	require.NoError(t, err)
+	mergedRoots, err := multipleRoots.Roots()
+	require.NoError(t, err)
+	expected := []string{*leftVersion, *rightVersion}
+	sort.Strings(expected)
+	sort.Strings(mergedRoots)
+	require.Equal(t, expected, mergedRoots)
+}
