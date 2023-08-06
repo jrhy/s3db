@@ -114,6 +114,7 @@ usage:
 [deadline='<N>[s,m,h,d]',]         timeout operations if they take too long (defaults to forever)
 [entries_per_node=<N>,]            the number of rows to store in per S3 object (defaults to 4096)
 [node_cache_entries=<N>,]          number of nodes to cache in memory (defaults to 0)
+[readonlyl,]                       don't write to S3
 [s3_bucket='mybucket',]            defaults to in-memory bucket
 [s3_endpoint='https://minio.example.com',]
                                    S3 endpoint, if not using AWS
@@ -153,6 +154,8 @@ usage:
 				return nil, fmt.Errorf("arg: %w", err)
 			}
 			table.s3.NodeCacheEntries = int(i)
+		case "readonly":
+			table.s3.ReadOnly = true
 		case "s3_bucket":
 			table.s3.Bucket = unquoteAll(s[1])
 		case "s3_endpoint":
@@ -697,6 +700,7 @@ type s3Options struct {
 
 	EntriesPerNode   int
 	NodeCacheEntries int
+	ReadOnly         bool
 }
 
 func getS3(endpoint string) (*s3.S3, error) {
@@ -718,14 +722,15 @@ func newKV(ctx context.Context, s3opts s3Options, subdir string) (*KV, error) {
 	var err error
 	var c kv.S3Interface
 	var closer func()
-	if (s3opts == s3Options{}) {
+	if s3opts.Bucket == "" {
+		if s3opts.Endpoint != "" {
+			return nil, fmt.Errorf("s3_endpoint specified without s3_bucket")
+		}
 		var bucketName string
 		var s3Client *s3.S3
 		s3Client, bucketName, closer = s3test.Client()
-		s3opts = s3Options{
-			Endpoint: s3Client.Endpoint,
-			Bucket:   bucketName,
-		}
+		s3opts.Endpoint = s3Client.Endpoint
+		s3opts.Bucket = bucketName
 		c = s3Client
 	} else {
 		c, err = getS3(s3opts.Endpoint)
@@ -755,7 +760,10 @@ func newKV(ctx context.Context, s3opts s3Options, subdir string) (*KV, error) {
 	if s3opts.EntriesPerNode > 0 {
 		cfg.BranchFactor = uint(s3opts.EntriesPerNode)
 	}
-	s, err := kv.Open(ctx, c, cfg, kv.OpenOptions{}, time.Now())
+	openOpts := kv.OpenOptions{
+		ReadOnly: s3opts.ReadOnly,
+	}
+	s, err := kv.Open(ctx, c, cfg, openOpts, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
