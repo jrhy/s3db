@@ -1,6 +1,6 @@
 
 all:
-	cd ../sharedlib && CGO_ENABLED=1 go generate
+	cd sharedlib && CGO_ENABLED=1 go generate
 
 start-minio:
 	if ! which minio ; then \
@@ -27,11 +27,11 @@ MINIO_ENV=\
 
 run: all scratch.sqlite
 	export ${MINIO_ENV} ; sqlite3 scratch.sqlite \
-		-cmd '.load ../sharedlib/s3db'
+		-cmd '.load sharedlib/s3db'
 
 scratch.sqlite:
 	export ${MINIO_ENV} ; sqlite3 scratch.sqlite \
-		-cmd '.load ../sharedlib/s3db' \
+		-cmd '.load sharedlib/s3db' \
 		"create virtual table if not exists scratch using s3db \
 		   (node_cache_entries=1000, \
 		    s3_bucket='mybucket', \
