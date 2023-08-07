@@ -1,7 +1,3 @@
-// Cannot test on MacOS due to lack of -linkshared.
-
-// +build !darwin
-
 package mod_test
 
 import (
@@ -11,20 +7,25 @@ import (
 
 	"github.com/jrhy/mast/persist/s3test"
 	"github.com/jrhy/s3db/test"
-	"github.com/mattn/go-sqlite3"
+
+	// register s3db extension with riyazali.net/sqlite
+	_ "github.com/jrhy/s3db/sqlite/mod"
+	// autoload riyazali.net/sqlite-registered extensions in sqlite
+	_ "github.com/jrhy/s3db/sqlite/sqlite-autoload-extension"
+	// mattn's awesome sql driver for sqlite
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func init() {
-	driver := &sqlite3.SQLiteDriver{}
-	driver.Extensions = []string{"./s3db"}
-
-	sql.Register("sqlite3_with_extensions", driver)
+	os.Setenv("AWS_REGION", "dummy")
+	os.Setenv("AWS_ACCESS_KEY_ID", "dummy")
+	os.Setenv("AWS_SECRET_ACCESS_KEY", "dummy")
 }
 
 type extension struct{}
 
 func (e *extension) OpenDB() (*sql.DB, string, string) {
-	db, err := sql.Open("sqlite3_with_extensions", ":memory:")
+	db, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
 		panic(err)
 	}
