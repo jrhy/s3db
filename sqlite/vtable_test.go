@@ -9,7 +9,7 @@ import (
 	"github.com/jrhy/s3db/test"
 
 	// register s3db extension with riyazali.net/sqlite
-	_ "github.com/jrhy/s3db/sqlite/mod"
+	_ "github.com/jrhy/s3db/sqlite"
 	// autoload riyazali.net/sqlite-registered extensions in sqlite
 	_ "github.com/jrhy/s3db/sqlite/sqlite-autoload-extension"
 	// mattn's awesome sql driver for sqlite
