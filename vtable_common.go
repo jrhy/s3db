@@ -9,16 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/segmentio/ksuid"
 
-	"github.com/jrhy/mast/persist/s3test"
+	"github.com/jrhy/s3db/internal"
 	"github.com/jrhy/s3db/kv"
 	"github.com/jrhy/s3db/kv/crdt"
 	"github.com/jrhy/s3db/sql"
-	"github.com/jrhy/s3db/sql/colval"
 	"github.com/jrhy/s3db/sql/parse"
 	sqlTypes "github.com/jrhy/s3db/sql/types"
 
@@ -41,11 +37,6 @@ func init() {
 	tables = make(map[string]*VirtualTable)
 }
 
-type KV struct {
-	Root   *kv.DB
-	closer func()
-}
-
 type Module struct{}
 
 type VirtualTable struct {
@@ -58,34 +49,11 @@ type VirtualTable struct {
 	ColumnNameByIndex map[int]string
 	Tree              *KV
 	txStart           *kv.DB
-	keyCol            int
+	KeyCol            int
 	usesRowID         bool
 	writeTime         *time.Time
 
-	s3 s3Options
-}
-
-func unquoteAll(s string) string {
-	if len(s) == 0 {
-		return ""
-	}
-	p := &parse.Parser{
-		Remaining: s,
-	}
-	var cv colval.ColumnValue
-	var res string
-	for {
-		if ok := sql.ColumnValueParser(&cv)(p); !ok {
-			dbg("skipping unquote; using: %s\n", s)
-			return s
-		}
-		res += cv.String()
-		if len(p.Remaining) == 0 {
-			break
-		}
-	}
-	dbg("unquoted to: %s\n", res)
-	return res
+	S3Options S3Options
 }
 
 const SQLiteTimeFormat = "2006-01-02 15:04:05"
@@ -131,12 +99,12 @@ usage:
 		seen[s[0]] = struct{}{}
 		switch s[0] {
 		case "columns":
-			err = convertSchema(unquoteAll(s[1]), table)
+			err = convertSchema(internal.UnquoteAll(s[1]), table)
 			if err != nil {
-				return nil, fmt.Errorf("schema: %w", err)
+				return nil, fmt.Errorf("columns: %w", err)
 			}
 		case "deadline":
-			d, err := time.ParseDuration(unquoteAll(s[1]))
+			d, err := time.ParseDuration(internal.UnquoteAll(s[1]))
 			if err != nil {
 				return nil, fmt.Errorf("deadline: %w", err)
 			}
@@ -147,23 +115,23 @@ usage:
 			if err != nil {
 				return nil, fmt.Errorf("arg: %w", err)
 			}
-			table.s3.EntriesPerNode = int(i)
+			table.S3Options.EntriesPerNode = int(i)
 		case "node_cache_entries":
 			i, err := strconv.ParseInt(s[1], 32, 0)
 			if err != nil {
 				return nil, fmt.Errorf("arg: %w", err)
 			}
-			table.s3.NodeCacheEntries = int(i)
+			table.S3Options.NodeCacheEntries = int(i)
 		case "readonly":
-			table.s3.ReadOnly = true
+			table.S3Options.ReadOnly = true
 		case "s3_bucket":
-			table.s3.Bucket = unquoteAll(s[1])
+			table.S3Options.Bucket = internal.UnquoteAll(s[1])
 		case "s3_endpoint":
-			table.s3.Endpoint = unquoteAll(s[1])
+			table.S3Options.Endpoint = internal.UnquoteAll(s[1])
 		case "s3_prefix":
-			table.s3.Prefix = unquoteAll(s[1])
+			table.S3Options.Prefix = internal.UnquoteAll(s[1])
 		case "write_time":
-			t, err := time.Parse(SQLiteTimeFormat, unquoteAll(s[1]))
+			t, err := time.Parse(SQLiteTimeFormat, internal.UnquoteAll(s[1]))
 			if err != nil {
 				return nil, fmt.Errorf("write_time: %w", err)
 			}
@@ -174,10 +142,10 @@ usage:
 	}
 
 	if table.SchemaString == "" {
-		return nil, errors.New(`unspecified: columns='colname [type] [primary key] [not null], ...'`)
+		return nil, errors.New(`unspecified: columns='colname [type] [primary key], ...'`)
 	}
 
-	table.Tree, err = newKV(table.Ctx, table.s3, "s3db-rows")
+	table.Tree, err = OpenKV(table.Ctx, table.S3Options, "s3db-rows")
 	if err != nil {
 		return nil, fmt.Errorf("s3db: %w", err)
 	}
@@ -231,9 +199,9 @@ func convertSchema(s string, t *VirtualTable) error {
 		}
 		if c.Name == keyColName {
 			s += " PRIMARY KEY"
-			t.keyCol = i
+			t.KeyCol = i
 		}
-		if c.Unique && i != t.keyCol {
+		if c.Unique && i != t.KeyCol {
 			return fmt.Errorf("UNIQUE not supported for non-key column: %s", c.Name)
 		}
 		if c.Default != nil {
@@ -315,7 +283,7 @@ func (c *VirtualTable) BestIndex(input []IndexInput, order []OrderInput) (*Index
 		if input[i].Op == OpIgnore {
 			continue
 		}
-		if input[i].ColumnIndex != c.keyCol {
+		if input[i].ColumnIndex != c.KeyCol {
 			continue
 		}
 		out.Used[i] = true
@@ -330,7 +298,7 @@ func (c *VirtualTable) BestIndex(input []IndexInput, order []OrderInput) (*Index
 	out.AlreadyOrdered = true
 	var desc *bool
 	for i := range order {
-		if order[i].Column != c.keyCol {
+		if order[i].Column != c.KeyCol {
 			out.AlreadyOrdered = false
 		}
 		if desc != nil {
@@ -363,8 +331,8 @@ func (c *VirtualTable) Disconnect() error {
 	dbg("DISCONNECT\n")
 
 	c.Tree.Root.Cancel()
-	if c.Tree.closer != nil {
-		c.Tree.closer()
+	if c.Tree. Closer != nil {
+		c.Tree.Closer()
 	}
 	c.Tree = nil
 	if c.cancelFunc != nil {
@@ -477,10 +445,10 @@ func (c *Cursor) Column(i int) (interface{}, error) {
 		return nil, fmt.Errorf("accessing deleted row")
 	}
 	var res interface{}
-	if i == c.t.keyCol {
+	if i == c.t.KeyCol {
 		res = c.currentKey.Value()
 	} else if cv, ok := c.currentRow.ColumnValues[c.t.ColumnNameByIndex[i]]; ok {
-		res = fromSQLiteValue(cv.Value)
+		res = FromSQLiteValue(cv.Value)
 	}
 	dbg("column %d: %T %+v\n", i, res, res)
 	return res, nil
@@ -585,7 +553,7 @@ func getRow(c *VirtualTable, key *Key, row **v1proto.Row, rowTime *time.Time) (b
 
 func (c *VirtualTable) Insert(values map[int]interface{}) (int64, error) {
 	dbg("INSERT ")
-	if _, ok := values[c.keyCol]; !ok {
+	if _, ok := values[c.KeyCol]; !ok {
 		return 0, errors.New("insert without key")
 	}
 	t := c.updateTime()
@@ -597,7 +565,7 @@ func (c *VirtualTable) Insert(values map[int]interface{}) (int64, error) {
 		}
 		key = r.String()
 	} else {
-		key = values[c.keyCol]
+		key = values[c.KeyCol]
 		if key == nil {
 			return 0, ErrS3DBConstraintNotNull
 		}
@@ -615,7 +583,7 @@ func (c *VirtualTable) Insert(values map[int]interface{}) (int64, error) {
 	}
 	new.ColumnValues = make(map[string]*v1proto.ColumnValue)
 	for i, v := range values {
-		if i == c.keyCol {
+		if i == c.KeyCol {
 			continue
 		}
 		colName := c.ColumnNameByIndex[i]
@@ -633,7 +601,7 @@ func (c *VirtualTable) Insert(values map[int]interface{}) (int64, error) {
 func (c *VirtualTable) Update(key interface{}, values map[int]interface{}) error {
 	dbg("UPDATE ")
 	if key == nil {
-		key = values[c.keyCol]
+		key = values[c.KeyCol]
 	}
 	if key == nil {
 		return errors.New("no key set")
@@ -651,7 +619,7 @@ func (c *VirtualTable) Update(key interface{}, values map[int]interface{}) error
 	}
 	new.ColumnValues = make(map[string]*v1proto.ColumnValue)
 	for i, v := range values {
-		if i == c.keyCol {
+		if i == c.KeyCol {
 			continue
 		}
 		dbg("SET %d %v=%v\n", i, key, v)
@@ -691,87 +659,6 @@ func (c *VirtualTable) Delete(key interface{}) error {
 		return fmt.Errorf("set: %w", err)
 	}
 	return nil
-}
-
-type s3Options struct {
-	Bucket   string
-	Endpoint string
-	Prefix   string
-
-	EntriesPerNode   int
-	NodeCacheEntries int
-	ReadOnly         bool
-}
-
-func getS3(endpoint string) (*s3.S3, error) {
-	config := aws.Config{}
-	if endpoint != "" {
-		config.Endpoint = &endpoint
-		config.S3ForcePathStyle = aws.Bool(true)
-	}
-
-	sess, err := session.NewSession(&config)
-	if err != nil {
-		return nil, fmt.Errorf("session: %w", err)
-	}
-
-	return s3.New(sess), nil
-}
-
-func newKV(ctx context.Context, s3opts s3Options, subdir string) (*KV, error) {
-	var err error
-	var c kv.S3Interface
-	var closer func()
-	if s3opts.Bucket == "" {
-		if s3opts.Endpoint != "" {
-			return nil, fmt.Errorf("s3_endpoint specified without s3_bucket")
-		}
-		var bucketName string
-		var s3Client *s3.S3
-		s3Client, bucketName, closer = s3test.Client()
-		s3opts.Endpoint = s3Client.Endpoint
-		s3opts.Bucket = bucketName
-		c = s3Client
-	} else {
-		c, err = getS3(s3opts.Endpoint)
-		if err != nil {
-			return nil, fmt.Errorf("s3 client: %w", err)
-		}
-	}
-	path := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSuffix(s3opts.Prefix, "/"), "/") + "/" + strings.TrimPrefix(subdir, "/"), "/")
-
-	cfg := kv.Config{
-		Storage: &kv.S3BucketInfo{
-			EndpointURL: s3opts.Endpoint,
-			BucketName:  s3opts.Bucket,
-			Prefix:      path,
-		},
-		KeysLike:                     &Key{},
-		ValuesLike:                   &v1proto.Row{},
-		CustomMerge:                  mergeValues,
-		CustomMarshal:                marshalProto,
-		CustomUnmarshal:              unmarshalProto,
-		MastNodeFormat:               string(mast.V1Marshaler),
-		UnmarshalUsesRegisteredTypes: true,
-	}
-	if s3opts.NodeCacheEntries > 0 {
-		cfg.NodeCache = mast.NewNodeCache(s3opts.NodeCacheEntries)
-	}
-	if s3opts.EntriesPerNode > 0 {
-		cfg.BranchFactor = uint(s3opts.EntriesPerNode)
-	}
-	openOpts := kv.OpenOptions{
-		ReadOnly: s3opts.ReadOnly,
-	}
-	s, err := kv.Open(ctx, c, cfg, openOpts, time.Now())
-	if err != nil {
-		return nil, fmt.Errorf("open: %w", err)
-	}
-	dbg("%s size:%d\n", subdir, s.Size())
-	return &KV{
-		Root:   s,
-		closer: closer,
-	}, nil
 }
 
 // REMOVE var maxTime = time.Unix(1<<63-62135596801, 999999999)
@@ -969,7 +856,7 @@ func unmarshalProto(inBytes []byte, outi interface{}) error {
 	return nil
 }
 
-func fromSQLiteValue(s *v1proto.SQLiteValue) interface{} {
+func FromSQLiteValue(s *v1proto.SQLiteValue) interface{} {
 	switch s.Type {
 	case v1proto.Type_INT:
 		return s.Int

@@ -528,7 +528,12 @@ func TestAggregation(t *testing.T) {
 		}
 		var lastReadPrimary *DB
 		if ok {
-			lastReadPrimary, err = Open(ctx, c, primaryConfig, OpenOptions{ReadOnly: true, SingleVersion: dd.SourceVersion}, time.Time{})
+			lastReadPrimary, err = Open(ctx, c, primaryConfig,
+				OpenOptions{
+					ReadOnly:     true,
+					OnlyVersions: []string{dd.SourceVersion},
+				},
+				time.Time{})
 			if err != nil {
 				// log that we couldn't read the old version, but that's OK, we can regenerate everything from scratch
 			}
@@ -1360,7 +1365,7 @@ func TestConflictDetection(t *testing.T) {
 		_, err = s2.Commit(ctx)
 		require.NoError(t, err)
 		_, err = Open(ctx, c, cfg, OpenOptions{}, tm.next())
-		require.EqualError(t, err, "merge: callback error: OnConflictMerged: momma said knock you out")
+		require.EqualError(t, err, "merge: callback: OnConflictMerged: momma said knock you out")
 		require.Equal(t, 1, conflicts)
 	})
 

@@ -17,7 +17,7 @@ import (
 	_ "github.com/jrhy/s3db/sqlite"
 	// autoload riyazali.net/sqlite-registered extensions in sqlite
 	_ "github.com/jrhy/s3db/sqlite/sqlite-autoload-extension"
-	// mattn's awesome sql driver for sqlite
+	// mattn's awesome Go sql driver for sqlite
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -167,8 +167,8 @@ func dump(rows *sql.Rows) error {
 	return nil
 }
 
-func mustQueryToJSON(db *sql.DB, query string) string {
-	rows, err := db.Query(query)
+func mustQueryToJSON(db *sql.DB, query string, args ...any) string {
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		panic(fmt.Errorf("%s: %w", query, err))
 	}
@@ -531,4 +531,94 @@ columns='a primary key, b')`,
 				mustQueryToJSON(db, "select * from noprefix;"))
 		})
 
+}
+
+func TestCurrentVersion_Empty(t *testing.T) {
+	db, s3Bucket, s3Endpoint := openDB()
+	defer db.Close()
+
+	_, err := db.Exec(fmt.Sprintf(`create virtual table `+t.Name()+` using s3db (
+s3_bucket='%s',
+s3_endpoint='%s',
+s3_prefix='version_empty',
+columns='a primary key, b')`,
+		s3Bucket, s3Endpoint))
+	require.NoError(t, err)
+
+	r, err := db.Query(`select s3db_version($1)`, t.Name())
+	require.NoError(t, err)
+	defer r.Close()
+	require.True(t, r.Next())
+	var current_version_json string
+	require.NoError(t, r.Scan(&current_version_json))
+	require.Equal(t, "[]", current_version_json)
+}
+
+func TestCurrentVersion_Happy(t *testing.T) {
+	db, s3Bucket, s3Endpoint := openDB()
+	defer db.Close()
+
+	_, err := db.Exec(fmt.Sprintf(`create virtual table `+t.Name()+` using s3db (
+s3_bucket='%s',
+s3_endpoint='%s',
+s3_prefix='version_happy',
+columns='a primary key, b')`,
+		s3Bucket, s3Endpoint))
+	require.NoError(t, err)
+	_, err = db.Exec(`insert into `+t.Name()+` values($1, $2)`, 1, 1)
+	require.NoError(t, err)
+
+	r, err := db.Query(`select s3db_version($1)`, t.Name())
+	require.NoError(t, err)
+	defer r.Close()
+	require.True(t, r.Next())
+	var current_version_json []byte
+	require.NoError(t, r.Scan(&current_version_json))
+	var roots []string
+	require.NoError(t, json.Unmarshal(current_version_json, &roots))
+	require.Equal(t, 1, len(roots))
+}
+
+func TestCurrentVersion_Multiple(t *testing.T) {
+	db, s3Bucket, s3Endpoint := openDB()
+	defer db.Close()
+
+	_, err := db.Exec(fmt.Sprintf(`create virtual table v1 using s3db (
+s3_bucket='%s',
+s3_endpoint='%s',
+s3_prefix='multiple',
+columns='a primary key, b')`,
+		s3Bucket, s3Endpoint))
+	require.NoError(t, err)
+	_, err = db.Exec(fmt.Sprintf(`create virtual table v2 using s3db (
+s3_bucket='%s',
+s3_endpoint='%s',
+s3_prefix='multiple',
+columns='a primary key, b')`,
+		s3Bucket, s3Endpoint))
+	require.NoError(t, err)
+
+	_, err = db.Exec(`insert into v1 values($1,$2)`, 1, 1)
+	require.NoError(t, err)
+	_, err = db.Exec(`insert into v2 values($1,$2)`, 1, 1)
+	require.NoError(t, err)
+
+	_, err = db.Exec(fmt.Sprintf(`create virtual table merged_in_memory using s3db (
+readonly,
+s3_bucket='%s',
+s3_endpoint='%s',
+s3_prefix='multiple',
+columns='a primary key, b')`,
+		s3Bucket, s3Endpoint))
+	require.NoError(t, err)
+
+	r, err := db.Query(`select s3db_version("merged_in_memory")`)
+	require.NoError(t, err)
+	defer r.Close()
+	require.True(t, r.Next())
+	var current_version_json []byte
+	require.NoError(t, r.Scan(&current_version_json))
+	var roots []string
+	require.NoError(t, json.Unmarshal(current_version_json, &roots))
+	require.Equal(t, 2, len(roots))
 }

@@ -20,16 +20,16 @@ func init() {
 		}
 		fromVersion := sa.Arg[0]
 		from := open(sa.Ctx, &kv.OpenOptions{
-			SingleVersion: fromVersion,
-			ReadOnly:      true,
+			OnlyVersions: []string{fromVersion},
+			ReadOnly:     true,
 		}, sa)
 		var toVersion string
 		if al > 1 {
 			toVersion = sa.Arg[1]
 		}
 		to := open(sa.Ctx, &kv.OpenOptions{
-			SingleVersion: toVersion,
-			ReadOnly:      true,
+			OnlyVersions: []string{toVersion},
+			ReadOnly:     true,
 		}, sa)
 		err := to.Diff(sa.Ctx, from, sa.diff())
 		if err != nil {

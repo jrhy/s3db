@@ -32,9 +32,9 @@ run: all scratch.sqlite
 scratch.sqlite:
 	export ${MINIO_ENV} ; sqlite3 scratch.sqlite \
 		-cmd '.load sharedlib/s3db' \
-		"create virtual table if not exists scratch using s3db \
+		"create virtual table if not exists mytable using s3db \
 		   (node_cache_entries=1000, \
 		    s3_bucket='mybucket', \
 		    s3_endpoint='$$S3_ENDPOINT', \
-		    s3_prefix='scratch', \
-		    columns='a PRIMARY KEY, b')"
+		    s3_prefix='mytable', \
+		    columns='id PRIMARY KEY, name, email')"
