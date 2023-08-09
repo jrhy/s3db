@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"reflect"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -123,8 +124,8 @@ type S3BucketInfo struct {
 type OpenOptions struct {
 	// ReadOnly means the database should not permit modifications.
 	ReadOnly bool
-	// SingleVersion is used to open a historic version
-	SingleVersion string
+	// OnlyVersions is used to see a tree as it looked for a set of historic versions
+	OnlyVersions []string
 	// ForceRebranch is used to change the branch factor of an existing tree, rewriting nodes and roots if necessary
 	ForceRebranch bool
 }
@@ -143,8 +144,8 @@ type S3Interface interface {
 
 // Open returns a database. 'when' marks the creation time of the new version.
 func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, when time.Time) (*DB, error) {
-	if !opts.ReadOnly && opts.SingleVersion != "" {
-		return nil, fmt.Errorf("opts.SingleVersion requires opts.ReadOnly")
+	if !opts.ReadOnly && len(opts.OnlyVersions) > 0 {
+		return nil, fmt.Errorf("opts.OnlyVersions requires opts.ReadOnly")
 	}
 	if cfg.KeysLike == nil {
 		return nil, fmt.Errorf("config KeysLike must be non-nil")
@@ -195,23 +196,25 @@ func Open(ctx context.Context, S3 S3Interface, cfg Config, opts OpenOptions, whe
 	if cfg.OnConflictMerged != nil {
 		crdtConfig.OnConflictMerged = crdt.OnConflictMerged(cfg.OnConflictMerged)
 	}
+	var versionsToLoad []string
+	var skipUnreadable bool
 	var kvVersion int
-	if opts.SingleVersion != "" {
-		root, _, err := loadNamedRoot(ctx, rootPersist, mergedPersist, opts.SingleVersion)
-		if err != nil {
-			return nil, fmt.Errorf("loadNamedRoot(%s): %w", opts.SingleVersion, err)
-		}
-		tree, err = crdt.Load(ctx, crdtConfig, &opts.SingleVersion, *root)
-		if err != nil {
-			return nil, fmt.Errorf("load: %w", err)
-		}
-		kvVersion = root.KVVersion
+	var err error
+	persists := []mast.Persist{rootPersist}
+	if opts.OnlyVersions != nil {
+		versionsToLoad = opts.OnlyVersions
+		persists = []mast.Persist{mergedPersist, rootPersist}
+		skipUnreadable = false
 	} else {
-		var err error
-		tree, mergedRoots, unmergeableRoots, err = mergeRoots(ctx, S3, cfg, crdtConfig, rootPersist, when, opts.ForceRebranch, &kvVersion)
+		versionsToLoad, err = listRoots(ctx, S3, rootPersist)
 		if err != nil {
-			return nil, fmt.Errorf("merge: %w", err)
+			return nil, err
 		}
+		skipUnreadable = true
+	}
+	tree, mergedRoots, unmergeableRoots, err = mergeRoots(ctx, versionsToLoad, cfg, crdtConfig, persists, when, opts.ForceRebranch, &kvVersion, skipUnreadable)
+	if err != nil {
+		return nil, fmt.Errorf("merge: %w", err)
 	}
 
 	s := DB{
@@ -295,24 +298,35 @@ func (e *persistEncryptor) NodeURLPrefix() string {
 	return e.Persist.NodeURLPrefix()
 }
 
-func mergeRoots(
+func listRoots(
 	ctx context.Context,
 	S3 S3Interface,
+	rootPersist *s3Persist.Persist,
+) ([]string, error) {
+	roots, err := listObjects(ctx, S3, rootPersist.BucketName, rootPersist.Prefix)
+	if err != nil {
+		return nil, fmt.Errorf("s3 list: %w", err)
+	}
+	return roots, nil
+}
+
+func mergeRoots(
+	ctx context.Context,
+	roots []string,
 	cfg Config,
 	crdtConfig crdt.Config,
-	rootPersist *s3Persist.Persist,
+	persists []mast.Persist,
 	when time.Time,
 	forceRebranch bool,
 	maxVersion *int,
+	skipUnreadable bool,
 ) (*crdt.Tree, map[string][]byte, int, error) {
-	roots, err := listObjects(ctx, S3, rootPersist.BucketName, rootPersist.Prefix)
-	if err != nil {
-		return nil, nil, 0, fmt.Errorf("s3 list: %w", err)
-	}
+	var err error
 
 	// Even if we can't merge all the roots, due to errors, it's nice to make some
 	// progress merging what we can. In order to not be persistently blocked by a
 	// lowest-named root, we randomize the order.
+	roots = append([]string{}, roots...)
 	rand.Shuffle(len(roots), func(i, j int) {
 		roots[i], roots[j] = roots[j], roots[i]
 	})
@@ -320,16 +334,15 @@ func mergeRoots(
 	mergedRoots := make(map[string][]byte, len(roots))
 	var tree *crdt.Tree
 	for _, key := range roots {
-		root, rootBytes, err := loadRoot(ctx, rootPersist, key)
+		root, rootBytes, err := loadRootFromAny(ctx, persists, key)
 		if err != nil {
-			var ae awserr.Error
-			if errors.As(err, &ae) && ae.Code() == s3.ErrCodeNoSuchKey {
-				if cfg.LogFunc != nil {
-					cfg.LogFunc(fmt.Sprintf("skipping merge for deleted root %v: %v", key, err))
-				}
+			return nil, nil, 0, fmt.Errorf("load %v: %w", key, err)
+		}
+		if root == nil {
+			if skipUnreadable {
 				continue
 			}
-			return nil, nil, 0, err
+			return nil, nil, 0, fmt.Errorf("load %v: not found", key)
 		}
 		if root.KVVersion > *maxVersion {
 			*maxVersion = root.KVVersion
@@ -337,7 +350,7 @@ func mergeRoots(
 		graft, err := crdt.Load(ctx, crdtConfig, &key, *root)
 		if err != nil {
 			var ae awserr.Error
-			if errors.As(err, &ae) && ae.Code() == s3.ErrCodeNoSuchKey {
+			if errors.As(err, &ae) && ae.Code() == s3.ErrCodeNoSuchKey && skipUnreadable {
 				if cfg.LogFunc != nil {
 					cfg.LogFunc(fmt.Sprintf("skipping merge for deleted root or parent in %v: %v", key, err))
 				}
@@ -368,7 +381,7 @@ func mergeRoots(
 
 			newTree, err := tree.Clone(ctx)
 			if err != nil {
-				if cfg.LogFunc != nil {
+				if cfg.LogFunc != nil && skipUnreadable {
 					cfg.LogFunc(fmt.Sprintf("skipping merge un-cloneable tree %v: %v", key, err))
 				}
 				continue
@@ -378,7 +391,7 @@ func mergeRoots(
 				return nil, nil, 0, err
 			}
 			if err != nil {
-				if cfg.LogFunc != nil {
+				if cfg.LogFunc != nil && skipUnreadable {
 					cfg.LogFunc(fmt.Sprintf("skipping merge un-cloneable tree %v: %v", key, err))
 				}
 				continue
@@ -407,6 +420,21 @@ func mergeRoots(
 	return tree, mergedRoots, unmergedRoots, nil
 }
 
+func loadRootFromAny(ctx context.Context, persist []mast.Persist, key string) (*crdt.Root, []byte, error) {
+	for i := range persist {
+		root, rootBytes, err := loadRoot(ctx, persist[i], key)
+		if err != nil {
+			var ae awserr.Error
+			if errors.As(err, &ae) && ae.Code() == s3.ErrCodeNoSuchKey {
+				continue
+			}
+			return nil, nil, fmt.Errorf("%s: %w", persist[i].NodeURLPrefix(), err)
+		}
+		return root, rootBytes, nil
+	}
+	return nil, nil, nil
+}
+
 func emptyRoot(when time.Time, branchFactor uint, crdtConfig crdt.Config) crdt.Root {
 	empty := crdt.NewRoot(when, branchFactor)
 	if crdtConfig.CustomMerge != nil {
@@ -422,7 +450,7 @@ func emptyRoot(when time.Time, branchFactor uint, crdtConfig crdt.Config) crdt.R
 func loadRoot(ctx context.Context, persist mast.Persist, key string) (*crdt.Root, []byte, error) {
 	rootBytes, err := persist.Load(ctx, key)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("load %s: %w", key, err)
 	}
 	var root crdt.Root
 	jsonErr := json.Unmarshal(rootBytes, &root)
@@ -558,20 +586,20 @@ func (s DB) loadRootGraph(ctx context.Context) (rootGraph, error) {
 	for _, rootName := range s.crdt.MergeSources {
 		todo[rootName] = struct{}{}
 	}
+	persists := []mast.Persist{s.merged, s.root}
 	for {
 		rootName, ok := getFirst(todo)
 		if !ok {
 			break
 		}
-		root, _, err := loadNamedRoot(ctx, s.root, s.merged, rootName)
+		root, _, err := loadRootFromAny(ctx, persists, rootName)
 		if err != nil {
-			var ae awserr.Error
-			if errors.As(err, &ae) && ae.Code() == s3.ErrCodeNoSuchKey {
-				// un-merged (current), or delayed root
-				delete(todo, rootName)
-				continue
-			}
-			return nil, fmt.Errorf("loadNamedRoot(%s): %w", rootName, err)
+			return nil, fmt.Errorf("load %s: %w", rootName, err)
+		}
+		if root == nil {
+			// un-merged (current), or delayed root
+			delete(todo, rootName)
+			continue
 		}
 		g[rootName] = root
 		for _, parentName := range root.MergeSources {
@@ -582,32 +610,6 @@ func (s DB) loadRootGraph(ctx context.Context) (rootGraph, error) {
 		delete(todo, rootName)
 	}
 	return g, nil
-}
-
-func loadNamedRoot(ctx context.Context, rootPersist, mergedPersist mast.Persist, rootName string) (*crdt.Root, []byte, error) {
-	// common case: the root is historic, not current
-	root, rootBytes, err := loadRoot(ctx, mergedPersist, rootName)
-	if err == nil {
-		return root, rootBytes, nil
-	}
-	if rootPersist == nil {
-		// caller only wants merged roots; give up now
-		return nil, nil, err
-	}
-	var ae awserr.Error
-	if !errors.As(err, &ae) || ae.Code() != s3.ErrCodeNoSuchKey {
-		return nil, nil, err
-	}
-	// is the root current?
-	root, rootBytes, err = loadRoot(ctx, rootPersist, rootName)
-	if err == nil {
-		return root, rootBytes, nil
-	}
-	if !errors.As(err, &ae) || ae.Code() != s3.ErrCodeNoSuchKey {
-		return nil, nil, err
-	}
-	// did it JUST get merged?
-	return loadRoot(ctx, mergedPersist, rootName)
 }
 
 type dependentRoots map[string]map[string]*crdt.Root
@@ -918,13 +920,21 @@ func (s *DB) TraceHistory(
 			if gv.PreviousRoot == "" {
 				continue
 			}
-			prev, err := Open(ctx, s.s3Client, *s.cfg, OpenOptions{ReadOnly: true, SingleVersion: gv.PreviousRoot}, time.Time{})
+			prev, err := Open(ctx, s.s3Client, *s.cfg,
+				OpenOptions{
+					ReadOnly:     true,
+					OnlyVersions: []string{gv.PreviousRoot},
+				}, time.Time{})
 			if err != nil {
 				return fmt.Errorf("open previous root: %s: %w", gv.PreviousRoot, err)
 			}
 			nextRound = append(nextRound, dbAndCutoff{prev, gv.ModEpochNanos})
 			for _, source := range prev.crdt.MergeSources {
-				prev, err := Open(ctx, s.s3Client, *s.cfg, OpenOptions{ReadOnly: true, SingleVersion: source}, time.Time{})
+				prev, err := Open(ctx, s.s3Client, *s.cfg,
+					OpenOptions{
+						ReadOnly:     true,
+						OnlyVersions: []string{source},
+					}, time.Time{})
 				if err != nil {
 					return fmt.Errorf("open previous source %s: %w", source, err)
 				}
@@ -957,6 +967,33 @@ func (r *dbAndCutoff) root() string {
 
 func (d *DB) BranchFactor() uint {
 	return d.crdt.Mast.BranchFactor()
+}
+
+type DiffCursor struct {
+	*mast.DiffCursor
+}
+
+func (d *DB) StartDiff(ctx context.Context, other *DB) (*DiffCursor, error) {
+	inner, err := d.crdt.Mast.StartDiff(ctx, other.crdt.Mast)
+	if err != nil {
+		return nil, err
+	}
+	return &DiffCursor{
+		DiffCursor: inner,
+	}, nil
+}
+func (dc *DiffCursor) NextEntry(ctx context.Context) (mast.Diff, error) {
+	inner, err := dc.DiffCursor.NextEntry(ctx)
+	if err != nil {
+		return mast.Diff{}, err
+	}
+	if inner.OldValue != nil {
+		inner.OldValue = inner.OldValue.(crdtpub.Value).Value
+	}
+	if inner.NewValue != nil {
+		inner.NewValue = inner.NewValue.(crdtpub.Value).Value
+	}
+	return inner, nil
 }
 
 type Cursor struct {
@@ -995,5 +1032,6 @@ func (s *DB) Roots() ([]string, error) {
 		}
 		i++
 	}
+	sort.Strings(roots)
 	return roots, nil
 }

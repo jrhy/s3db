@@ -130,6 +130,11 @@ func (c *Cursor) Column(ctx *sqlite.VirtualTableContext, i int) error {
 	if err != nil {
 		return toSqlite(err)
 	}
+	setContextResult(ctx, v, i)
+	return nil
+}
+
+func setContextResult(ctx *sqlite.VirtualTableContext, v interface{}, colIndex int) {
 	switch x := v.(type) {
 	case nil:
 		ctx.ResultNull()
@@ -144,9 +149,8 @@ func (c *Cursor) Column(ctx *sqlite.VirtualTableContext, i int) error {
 	case string:
 		ctx.ResultText(x)
 	default:
-		ctx.ResultError(fmt.Errorf("column %d: cannot convert %T", i, x))
+		ctx.ResultError(fmt.Errorf("column %d: cannot convert %T", colIndex, x))
 	}
-	return nil
 }
 
 func (c *Cursor) Filter(_ int, idxStr string, values ...sqlite.Value) error {
@@ -173,13 +177,12 @@ func init() {
 		if err != nil {
 			return sqlite.SQLITE_ERROR, err
 		}
-		err = api.CreateModule("s3db_roots", &RootsModule{},
+		err = api.CreateModule("s3db_changes", &ChangesModule{},
 			func(opts *sqlite.ModuleOptions) {
 				opts.ReadOnly = true
-				opts.EponymousOnly = true
 			})
 		if err != nil {
-			return sqlite.SQLITE_ERROR, fmt.Errorf("s3db_roots: %w", err)
+			return sqlite.SQLITE_ERROR, err
 		}
 		err = api.CreateModule("s3db_vacuum", &VacuumModule{},
 			func(opts *sqlite.ModuleOptions) {
@@ -188,6 +191,9 @@ func init() {
 			})
 		if err != nil {
 			return sqlite.SQLITE_ERROR, fmt.Errorf("s3db_vacuum: %w", err)
+		}
+		if err := api.CreateFunction("s3db_version", &VersionFunc{}); err != nil {
+			return sqlite.SQLITE_ERROR, fmt.Errorf("s3db_version: %w", err)
 		}
 		return sqlite.SQLITE_OK, nil
 	})
