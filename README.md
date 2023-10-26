@@ -80,6 +80,11 @@ CREATE VIRTUAL TABLE Options
                                    value modification time, for idempotence, from request time
 ```
 
+Performance
+===========
+You can use transactions (BEGIN TRANSACTION, INSERT..., COMMIT) to get
+include multiple rows per version of the table.
+
 Multiple Writers
 ================
 Multiple writers can commit modifications from the same version.
