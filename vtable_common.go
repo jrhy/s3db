@@ -733,11 +733,7 @@ func newKV(ctx context.Context, s3opts s3Options, subdir string) (*KV, error) {
 			return nil, fmt.Errorf("s3 client: %w", err)
 		}
 	}
-	path := strings.TrimPrefix(strings.TrimSuffix(s3opts.Prefix, "/"), "/") + "/" + strings.TrimPrefix(subdir, "/")
-	// TODO enable to observe kv bug around delete/merge needing squishing
-	if false && !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
+	path := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSuffix(s3opts.Prefix, "/"), "/") + "/" + strings.TrimPrefix(subdir, "/"), "/")
 
 	cfg := kv.Config{
 		Storage: &kv.S3BucketInfo{
