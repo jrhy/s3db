@@ -477,4 +477,41 @@ write_time='%s')`,
 			openTableWithWriteTime(t, "readv2", "2009-01-01 00:00:00")
 			require.Equal(t, `[[2007,0]]`, mustQueryToJSON(db, `select * from readv2`))
 		})
+
+	t.Run("NoPrefix",
+		func(t *testing.T) {
+			db, s3Bucket, s3Endpoint := opener.OpenDB()
+			defer db.Close()
+
+			_, err := db.Exec(fmt.Sprintf(`create virtual table v1noprefix using s3db (
+s3_bucket='%s',
+s3_endpoint='%s',
+columns='a primary key, b')`,
+				s3Bucket, s3Endpoint))
+			require.NoError(t, err)
+			_, err = db.Exec(fmt.Sprintf(`create virtual table v2noprefix using s3db (
+s3_bucket='%s',
+s3_endpoint='%s',
+columns='a primary key, b')`,
+				s3Bucket, s3Endpoint))
+			require.NoError(t, err)
+
+			_, err = db.Exec(`insert into v1noprefix values($1,$2)`, 1, 1)
+			require.NoError(t, err)
+			_, err = db.Exec(`insert into v2noprefix values($1,$2)`, 2, 2)
+			require.NoError(t, err)
+
+			_, err = db.Exec(fmt.Sprintf(`create virtual table noprefix using s3db (
+readonly,
+s3_bucket='%s',
+s3_endpoint='%s',
+columns='a primary key, b')`,
+				s3Bucket, s3Endpoint))
+			require.NoError(t, err)
+
+			require.Equal(t,
+				`[[1,1],[2,2]]`,
+				mustQueryToJSON(db, "select * from noprefix;"))
+		})
+
 }
