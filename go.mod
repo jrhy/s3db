@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/aws/aws-sdk-go v1.46.6
-	github.com/bufbuild/buf v1.27.1
+	github.com/bufbuild/buf v1.27.2
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/johannesboyne/gofakes3 v0.0.0-20230914150226-f005f5cc03aa
 	github.com/johncgriffin/overflow v0.0.0-20211019200055-46fa312c352c
@@ -47,7 +47,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jdx/go-netrc v1.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/klauspost/compress v1.17.1 // indirect
+	github.com/klauspost/compress v1.17.2 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
