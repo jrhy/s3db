@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -20,6 +21,12 @@ type KV struct {
 	Closer func()
 }
 
+var (
+	inMemoryS3Lock sync.Mutex
+	inMemoryS3 *s3.S3
+	inMemoryBucket string
+)
+
 func OpenKV(ctx context.Context, s3opts S3Options, subdir string) (*KV, error) {
 	var err error
 	var c kv.S3Interface
@@ -28,19 +35,21 @@ func OpenKV(ctx context.Context, s3opts S3Options, subdir string) (*KV, error) {
 		if s3opts.Endpoint != "" {
 			return nil, fmt.Errorf("s3_endpoint specified without s3_bucket")
 		}
-		var bucketName string
-		var s3Client *s3.S3
-		s3Client, bucketName, closer = s3test.Client()
-		s3opts.Endpoint = s3Client.Endpoint
-		s3opts.Bucket = bucketName
-		c = s3Client
+		inMemoryS3Lock.Lock()
+		defer inMemoryS3Lock.Unlock()
+		if inMemoryS3 == nil {
+			inMemoryS3, inMemoryBucket, _ = s3test.Client()
+		}
+		s3opts.Endpoint = inMemoryS3.Endpoint
+		s3opts.Bucket = inMemoryBucket
+		c = inMemoryS3
 	} else {
 		c, err = getS3(s3opts.Endpoint)
 		if err != nil {
 			return nil, fmt.Errorf("s3 client: %w", err)
 		}
 	}
-	path := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSuffix(s3opts.Prefix, "/"), "/") + "/" + strings.TrimPrefix(subdir, "/"), "/")
+	path := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSuffix(s3opts.Prefix, "/"), "/")+"/"+strings.TrimPrefix(subdir, "/"), "/")
 
 	cfg := kv.Config{
 		Storage: &kv.S3BucketInfo{
