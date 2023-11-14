@@ -26,10 +26,9 @@ func (c *ChangesModule) Connect(conn *sqlite.Conn, args []string,
 	args = args[3:]
 
 	if len(args) == 0 {
-		// columns='<colname> [type] [primary key] [not null], ...',
 		return nil, errors.New(`
 usage:
- from='["version1"]                starting version for getting changes, from s3db_version()
+ from='["version1"]',              starting version for getting changes, from s3db_version()
  table='...',                      table to get changes for, must already be loaded
 [to='["version2"]']                ending version for getting changes, from s3db_version()`)
 	}

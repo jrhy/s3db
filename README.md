@@ -104,23 +104,6 @@ sqlite> select * from removals;
 sqlite> drop table removals;
 ```
 
-CREATE VIRTUAL TABLE Options
-============================
-```
- columns='<colname> [primary key], ...',
-                                   columns and constraints
-[deadline='<N>[s,m,h,d]',]         timeout operations if they take too long (defaults to forever)
-[entries_per_node=<N>,]            the number of rows to store in per S3 object (defaults to 4096)
-[node_cache_entries=<N>,]          number of nodes to cache in memory (defaults to 0)
-[readonlyl,]                       don't write to S3
-[s3_bucket='mybucket',]            defaults to in-memory bucket
-[s3_endpoint='https://minio.example.com',]
-                                   S3 endpoint, if not using AWS
-[s3_prefix='/prefix',]             separate tables within a bucket
-[write_time='2006-01-02 15:04:05',]
-                                   value modification time, for idempotence, from request time`
-```
-
 Performance
 ===========
 Use transactions (BEGIN TRANSACTION, INSERT..., COMMIT) to include
@@ -159,4 +142,36 @@ function to free up space from versions older than a certain time, e.g.:
 ```select * from s3db_vacuum('mytable', datetime('now','-7 days'))```
 * Using `s3db` inside Go programs is best done using `github.com/jrhy/s3db/sqlite/mod`.
 See [sqlite/example-go-app/](sqlite/example-go-app/) for an example. 
+
+Function Reference
+==================
+`s3db_refresh(`*tablename*`)` reopens a table and to show updates from
+other writers.
+
+`s3db_version(`*tablename*`)` returns a list of the versions merged to
+form the current table.
+
+Table-Valued Function Reference
+===============================
+`s3db_vacuum(`*tablename*`,`*before-timestamp*`)` removes versions older
+than *before-timestamp*, e.g.
+`select * from s3db_vacuum('mytable', datetime('now','-7 days'))`.
+
+Virtual Table Reference
+=======================
+CREATE VIRTUAL TABLE *tablename* USING s3db() arguments:
+* `columns='<colname> [primary key], ...',` columns and constraints
+* (optional) `deadline='<N>[s,m,h,d]',`         timeout operations if they take too long (defaults to forever)
+* (optional) `entries_per_node=<N>,`            the number of rows to store in per S3 object (defaults to 4096)
+* (optional) `node_cache_entries=<N>,`          number of nodes to cache in memory (defaults to 0)
+* (optional) `readonlyl,`                       don't write to S3
+* (optional) `s3_bucket='mybucket',`            defaults to in-memory bucket
+* (optional) `s3_endpoint='https://minio.example.com',` S3 endpoint, if not using AWS
+* (optional) `s3_prefix='/prefix',`             separate tables within a bucket
+* (optional) `write_time='2006-01-02 15:04:05',` value modification time, for idempotence, from request time`
+
+CREATE VIRTUAL TABLE *tablename* USING s3db_changes() arguments:
+* `table=`*tablename*, the s3db table to show changes of. Must be loaded already.
+* `from=`*from-version*, the version to show changes since. Should be a previous result from `s3db_version()`.
+* (optional) `to=`*to-version*, the version to show changes until. Defaults to the current version. 
 
