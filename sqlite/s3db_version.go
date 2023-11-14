@@ -31,6 +31,7 @@ func (h *VersionFunc) Final(ctx *sqlite.AggregateContext) {
 	}
 	var fCtx = ctx.Data().(*VersionFuncContext)
 	if fCtx.tableName == "" {
+		ctx.ResultError(fmt.Errorf("missing table name"))
 		return
 	}
 	vt := s3db.GetTable(fCtx.tableName)

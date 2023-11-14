@@ -184,6 +184,9 @@ func init() {
 		if err != nil {
 			return sqlite.SQLITE_ERROR, err
 		}
+		if err := api.CreateFunction("s3db_refresh", &RefreshFunc{}); err != nil {
+			return sqlite.SQLITE_ERROR, fmt.Errorf("s3db_refresh: %w", err)
+		}
 		err = api.CreateModule("s3db_vacuum", &VacuumModule{},
 			func(opts *sqlite.ModuleOptions) {
 				opts.ReadOnly = true
