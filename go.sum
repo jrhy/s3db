@@ -14,8 +14,8 @@ github.com/Microsoft/go-winio v0.6.1/go.mod h1:LRdKpFKfdobln8UmuiYcKPot9D2v6svN5
 github.com/antlr/antlr4/runtime/Go/antlr/v4 v4.0.0-20230512164433-5d1fd1a340c9 h1:goHVqTbFX3AIo0tzGr14pgfAW2ZfPChKO21Z9MGf/gk=
 github.com/antlr/antlr4/runtime/Go/antlr/v4 v4.0.0-20230512164433-5d1fd1a340c9/go.mod h1:pSwJ0fSY5KhvocuWSx4fz3BA8OrA1bQn+K1Eli3BRwM=
 github.com/aws/aws-sdk-go v1.44.256/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
-github.com/aws/aws-sdk-go v1.47.11 h1:Dol+MA+hQblbnXUI3Vk9qvoekU6O1uDEuAItezjiWNQ=
-github.com/aws/aws-sdk-go v1.47.11/go.mod h1:LF8svs817+Nz+DmiMQKTO3ubZ/6IaTpq3TjupRn3Eqk=
+github.com/aws/aws-sdk-go v1.47.12 h1:1daICVijigVEXCzhg27A5d7hbkR4wODPGn9GHyBclKM=
+github.com/aws/aws-sdk-go v1.47.12/go.mod h1:LF8svs817+Nz+DmiMQKTO3ubZ/6IaTpq3TjupRn3Eqk=
 github.com/bufbuild/buf v1.28.0 h1:RQ05UJfBjfPPZpOo8xj47RasDsLkgItREh6C/oSvnJ0=
 github.com/bufbuild/buf v1.28.0/go.mod h1:yx8lF18i4mYucKTOoRWynWmGCxHo4R2oXsF0tGbeK90=
 github.com/bufbuild/protocompile v0.6.1-0.20231027200301-089712432bdc h1:vXhHeXQ7504WoYQ0TZF/ioquKCCZNox6MXI1/V0NotY=
