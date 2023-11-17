@@ -8,7 +8,9 @@ import (
 	"github.com/jrhy/s3db"
 )
 
-type RefreshFunc struct{}
+type RefreshFunc struct {
+	sc *S3DBConn
+}
 
 func (h *RefreshFunc) Args() int           { return 1 }
 func (h *RefreshFunc) Deterministic() bool { return false }
@@ -38,7 +40,7 @@ func (h *RefreshFunc) Final(ctx *sqlite.AggregateContext) {
 		ctx.ResultError(fmt.Errorf("table not found: %s", fCtx.tableName))
 		return
 	}
-	nt, err := s3db.OpenKV(vt.Ctx, vt.S3Options, "s3db-rows")
+	nt, err := s3db.OpenKV(h.sc.ctx, vt.S3Options, "s3db-rows")
 	if err != nil {
 		ctx.ResultError(fmt.Errorf("open: %w", err))
 		return

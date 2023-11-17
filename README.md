@@ -3,6 +3,7 @@ s3db is a SQLite extension that stores tables in an S3-compatible object store.
 What's New?
 ===========
 
+v0.1.35 adds the `s3db_conn` table for per-connection `deadline` and `write_time` attributes.
 v0.1.33 adds s3db_changes() and s3db_version()
 
 Getting Started
@@ -161,17 +162,21 @@ Virtual Table Reference
 =======================
 CREATE VIRTUAL TABLE *tablename* USING s3db() arguments:
 * `columns='<colname> [primary key], ...',` columns and constraints
-* (optional) `deadline='<N>[s,m,h,d]',`         timeout operations if they take too long (defaults to forever)
 * (optional) `entries_per_node=<N>,`            the number of rows to store in per S3 object (defaults to 4096)
 * (optional) `node_cache_entries=<N>,`          number of nodes to cache in memory (defaults to 0)
 * (optional) `readonlyl,`                       don't write to S3
 * (optional) `s3_bucket='mybucket',`            defaults to in-memory bucket
 * (optional) `s3_endpoint='https://minio.example.com',` S3 endpoint, if not using AWS
 * (optional) `s3_prefix='/prefix',`             separate tables within a bucket
-* (optional) `write_time='2006-01-02 15:04:05',` value modification time, for idempotence, from request time`
 
 CREATE VIRTUAL TABLE *tablename* USING s3db_changes() arguments:
 * `table=`*tablename*, the s3db table to show changes of. Must be loaded already.
 * `from=`*from-version*, the version to show changes since. Should be a previous result from `s3db_version()`.
 * (optional) `to=`*to-version*, the version to show changes until. Defaults to the current version. 
+
+`s3db_conn` sets per-connection attributes with the following columns:
+* `deadline` - the timestamp after which network operations will be cancelled (defaults to forever), e.g.
+`update s3db_conn set deadline=datetime('now','+3 seconds')`
+* `write_time` - value modification timestamp, for resolving updates to the same column in a row with
+"last-write wins" strategy idempotently
 

@@ -10,18 +10,18 @@ import (
 	"time"
 
 	"github.com/segmentio/ksuid"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/jrhy/mast"
 	"github.com/jrhy/s3db/internal"
 	"github.com/jrhy/s3db/kv"
 	"github.com/jrhy/s3db/kv/crdt"
 	"github.com/jrhy/s3db/sql"
 	"github.com/jrhy/s3db/sql/parse"
-	sqlTypes "github.com/jrhy/s3db/sql/types"
-
-	"github.com/jrhy/mast"
 	v1proto "github.com/jrhy/s3db/proto/v1"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
+	sqlTypes "github.com/jrhy/s3db/sql/types"
+	"github.com/jrhy/s3db/writetime"
 )
 
 var ErrS3DBConstraintNotNull = errors.New("constraint: NOT NULL")
@@ -41,7 +41,6 @@ type Module struct{}
 
 type VirtualTable struct {
 	Name              string
-	Ctx               context.Context
 	cancelFunc        func()
 	SchemaString      string
 	schema            *sqlTypes.Schema
@@ -51,14 +50,13 @@ type VirtualTable struct {
 	txStart           *kv.DB
 	KeyCol            int
 	usesRowID         bool
-	writeTime         *time.Time
 
 	S3Options S3Options
 }
 
 const SQLiteTimeFormat = "2006-01-02 15:04:05"
 
-func New(args []string) (*VirtualTable, error) {
+func New(ctx context.Context, args []string) (*VirtualTable, error) {
 	var err error
 
 	if len(args) == 0 || len(args[0]) == 0 {
@@ -72,23 +70,19 @@ func New(args []string) (*VirtualTable, error) {
 	}
 
 	dbg("CONNECT\n")
-	table.Ctx = context.Background()
 	if len(args) == 0 {
 		// columns='<colname> [type] [primary key] [not null], ...',
 		return nil, errors.New(`
 usage:
  columns='<colname> [primary key], ...',
                                    columns and constraints
-[deadline='<N>[s,m,h,d]',]         timeout operations if they take too long (defaults to forever)
 [entries_per_node=<N>,]            the number of rows to store in per S3 object (defaults to 4096)
 [node_cache_entries=<N>,]          number of nodes to cache in memory (defaults to 0)
 [readonlyl,]                       don't write to S3
 [s3_bucket='mybucket',]            defaults to in-memory bucket
 [s3_endpoint='https://minio.example.com',]
                                    S3 endpoint, if not using AWS
-[s3_prefix='/prefix',]             separate tables within a bucket
-[write_time='2006-01-02 15:04:05',]
-                                   value modification time, for idempotence, from request time`)
+[s3_prefix='/prefix',]             separate tables within a bucket`)
 	}
 	seen := map[string]struct{}{}
 	for i := range args {
@@ -103,13 +97,6 @@ usage:
 			if err != nil {
 				return nil, fmt.Errorf("columns: %w", err)
 			}
-		case "deadline":
-			d, err := time.ParseDuration(internal.UnquoteAll(s[1]))
-			if err != nil {
-				return nil, fmt.Errorf("deadline: %w", err)
-			}
-			t := time.Now().Add(d)
-			table.Ctx, table.cancelFunc = context.WithDeadline(context.Background(), t)
 		case "entries_per_node":
 			i, err := strconv.ParseInt(s[1], 0, 32)
 			if err != nil {
@@ -130,14 +117,8 @@ usage:
 			table.S3Options.Endpoint = internal.UnquoteAll(s[1])
 		case "s3_prefix":
 			table.S3Options.Prefix = internal.UnquoteAll(s[1])
-		case "write_time":
-			t, err := time.Parse(SQLiteTimeFormat, internal.UnquoteAll(s[1]))
-			if err != nil {
-				return nil, fmt.Errorf("write_time: %w", err)
-			}
-			table.writeTime = &t
 		default:
-			dbg("skipping arg %s\n", args[i])
+			return nil, fmt.Errorf("unknown option: %s", s[0])
 		}
 	}
 
@@ -145,7 +126,7 @@ usage:
 		return nil, errors.New(`unspecified: columns='colname [type] [primary key], ...'`)
 	}
 
-	table.Tree, err = OpenKV(table.Ctx, table.S3Options, "s3db-rows")
+	table.Tree, err = OpenKV(ctx, table.S3Options, "s3db-rows")
 	if err != nil {
 		return nil, fmt.Errorf("s3db: %w", err)
 	}
@@ -330,15 +311,14 @@ func (c *VirtualTable) Open() (*Cursor, error) {
 func (c *VirtualTable) Disconnect() error {
 	dbg("DISCONNECT\n")
 
+	if c.Tree == nil || c.Tree.Root == nil {
+		panic("already nil")
+	}
 	c.Tree.Root.Cancel()
-	if c.Tree. Closer != nil {
+	if c.Tree.Closer != nil {
 		c.Tree.Closer()
 	}
 	c.Tree = nil
-	if c.cancelFunc != nil {
-		c.cancelFunc()
-	}
-	c.Ctx = nil
 
 	tableLock.Lock()
 	defer tableLock.Unlock()
@@ -364,7 +344,7 @@ type Cursor struct {
 	gtMin, ltMax bool
 }
 
-func (c *Cursor) Next() error {
+func (c *Cursor) Next(ctx context.Context) error {
 	dbg("NEXT\n")
 	if c.eof {
 		dbg("NEXT EOF\n")
@@ -418,13 +398,13 @@ func (c *Cursor) Next() error {
 		}
 		if !c.desc {
 			dbg("next: cursor.Forward()\n")
-			err := c.cursor.Forward(c.t.Ctx)
+			err := c.cursor.Forward(ctx)
 			if err != nil {
 				return fmt.Errorf("forward: %w", err)
 			}
 		} else {
 			dbg("next: cursor.Backward()\n")
-			err := c.cursor.Backward(c.t.Ctx)
+			err := c.cursor.Backward(ctx)
 			if err != nil {
 				return fmt.Errorf("backward: %w", err)
 			}
@@ -454,7 +434,7 @@ func (c *Cursor) Column(i int) (interface{}, error) {
 	return res, nil
 }
 
-func (c *Cursor) Filter(idxStr string, val []interface{}) error {
+func (c *Cursor) Filter(ctx context.Context, idxStr string, val []interface{}) error {
 	dbg("FILTER idxStr=%+v val=%+v\n", idxStr, val)
 	c.ops = make([]Op, len(val))
 	c.operands = make([]*Key, len(val))
@@ -495,21 +475,21 @@ func (c *Cursor) Filter(idxStr string, val []interface{}) error {
 		}
 	}
 	var err error
-	c.cursor, err = c.t.Tree.Root.Cursor(c.t.Ctx)
+	c.cursor, err = c.t.Tree.Root.Cursor(ctx)
 	if err != nil {
 		return fmt.Errorf("cursor: %w", err)
 	}
 	if !c.desc {
 		if c.min != nil {
-			err = c.cursor.Ceil(c.t.Ctx, c.min)
+			err = c.cursor.Ceil(ctx, c.min)
 		} else {
-			err = c.cursor.Min(c.t.Ctx)
+			err = c.cursor.Min(ctx)
 		}
 	} else {
 		if c.max != nil {
-			err = c.cursor.Ceil(c.t.Ctx, c.max)
+			err = c.cursor.Ceil(ctx, c.max)
 		} else {
-			err = c.cursor.Max(c.t.Ctx)
+			err = c.cursor.Max(ctx)
 		}
 	}
 	if err != nil {
@@ -519,7 +499,7 @@ func (c *Cursor) Filter(idxStr string, val []interface{}) error {
 	c.currentRow = nil
 	c.eof = false
 	dbg("CURSOR RESETTING, now %+v before NEXT\n", c)
-	res := c.Next()
+	res := c.Next(ctx)
 	dbg("CURSOR RESET: err=%v eof? %v\n", res, c.eof)
 	return res
 }
@@ -536,9 +516,11 @@ func (c *Cursor) Close() error {
 	return nil
 }
 
-func getRow(c *VirtualTable, key *Key, row **v1proto.Row, rowTime *time.Time) (bool, error) {
+func getRow(ctx context.Context, c *VirtualTable, key *Key,
+	row **v1proto.Row, rowTime *time.Time,
+) (bool, error) {
 	var crdtValue crdt.Value
-	ok, err := c.Tree.Root.Get(c.Ctx, key, &crdtValue)
+	ok, err := c.Tree.Root.Get(ctx, key, &crdtValue)
 	if err != nil {
 		return false, err
 	}
@@ -551,12 +533,12 @@ func getRow(c *VirtualTable, key *Key, row **v1proto.Row, rowTime *time.Time) (b
 	return ok, nil
 }
 
-func (c *VirtualTable) Insert(values map[int]interface{}) (int64, error) {
-	dbg("INSERT ")
+func (c *VirtualTable) Insert(ctx context.Context, values map[int]interface{}) (int64, error) {
+	t := updateTime(ctx)
+	dbg("INSERT %v %+v", t, values)
 	if _, ok := values[c.KeyCol]; !ok {
 		return 0, errors.New("insert without key")
 	}
-	t := c.updateTime()
 	var key interface{}
 	if c.usesRowID {
 		r, err := ksuid.NewRandomWithTime(t)
@@ -574,7 +556,7 @@ func (c *VirtualTable) Insert(values map[int]interface{}) (int64, error) {
 	var old *v1proto.Row
 	var new v1proto.Row
 	var ot time.Time
-	ok, err := getRow(c, NewKey(key), &old, &ot)
+	ok, err := getRow(ctx, c, NewKey(key), &old, &ot)
 	if err != nil {
 		return 0, fmt.Errorf("get: %w", err)
 	}
@@ -591,14 +573,14 @@ func (c *VirtualTable) Insert(values map[int]interface{}) (int64, error) {
 		dbg("SET %d %v=%v\n", i, key, v)
 	}
 	merged := MergeRows(key, ot, old, t, &new, t)
-	err = c.Tree.Root.Set(c.Ctx, t, NewKey(key), merged)
+	err = c.Tree.Root.Set(ctx, t, NewKey(key), merged)
 	if err != nil {
 		return 0, fmt.Errorf("set: %w", err)
 	}
 	return 0, nil
 }
 
-func (c *VirtualTable) Update(key interface{}, values map[int]interface{}) error {
+func (c *VirtualTable) Update(ctx context.Context, key interface{}, values map[int]interface{}) error {
 	dbg("UPDATE ")
 	if key == nil {
 		key = values[c.KeyCol]
@@ -606,11 +588,11 @@ func (c *VirtualTable) Update(key interface{}, values map[int]interface{}) error
 	if key == nil {
 		return errors.New("no key set")
 	}
-	t := c.updateTime()
+	t := updateTime(ctx)
 	var old *v1proto.Row
 	var new v1proto.Row
 	var ot time.Time
-	ok, err := getRow(c, NewKey(key), &old, &ot)
+	ok, err := getRow(ctx, c, NewKey(key), &old, &ot)
 	if err != nil {
 		return fmt.Errorf("get: %w", err)
 	}
@@ -627,34 +609,27 @@ func (c *VirtualTable) Update(key interface{}, values map[int]interface{}) error
 		new.ColumnValues[colName] = ToColumnValue(v)
 	}
 	merged := MergeRows(key, ot, old, t, &new, t)
-	err = c.Tree.Root.Set(c.Ctx, t, NewKey(key), merged)
+	err = c.Tree.Root.Set(ctx, t, NewKey(key), merged)
 	if err != nil {
 		return fmt.Errorf("set: %w", err)
 	}
 	return nil
 }
 
-func (c *VirtualTable) updateTime() time.Time {
-	if c.writeTime != nil {
-		return *c.writeTime
-	}
-	return time.Now()
-}
-
-func (c *VirtualTable) Delete(key interface{}) error {
+func (c *VirtualTable) Delete(ctx context.Context, key interface{}) error {
 	dbg("DELETE ")
 	dbg("nochange=%v %s %+v\n", key, key, key)
 	var old *v1proto.Row
 	var new v1proto.Row
 	var ot time.Time
-	_, err := getRow(c, NewKey(key), &old, &ot)
+	_, err := getRow(ctx, c, NewKey(key), &old, &ot)
 	if err != nil {
 		return fmt.Errorf("get: %w", err)
 	}
-	t := c.updateTime()
+	t := updateTime(ctx)
 	new.Deleted = true
 	merged := MergeRows(key, ot, old, t, &new, t)
-	err = c.Tree.Root.Set(c.Ctx, t, NewKey(key), merged)
+	err = c.Tree.Root.Set(ctx, t, NewKey(key), merged)
 	if err != nil {
 		return fmt.Errorf("set: %w", err)
 	}
@@ -762,22 +737,22 @@ func adj(inTime time.Time, cv *v1proto.ColumnValue, outTime time.Time) *v1proto.
 	return out
 }
 
-func (c *VirtualTable) Begin() error {
+func (c *VirtualTable) Begin(ctx context.Context) error {
 	dbg("BEGIN\n")
 	var err error
 	if c.txStart != nil {
-		panic("transaction already in progress")
+		return errors.New("transaction already in progress")
 	}
-	c.txStart, err = c.Tree.Root.Clone(c.Ctx)
+	c.txStart, err = c.Tree.Root.Clone(ctx)
 	if err != nil {
 		return fmt.Errorf("clone: %w", err)
 	}
 	return nil
 }
 
-func (c *VirtualTable) Commit() error {
+func (c *VirtualTable) Commit(ctx context.Context) error {
 	dbg("COMMIT\n")
-	_, err := c.Tree.Root.Commit(c.Ctx)
+	_, err := c.Tree.Root.Commit(ctx)
 	if err != nil {
 		return fmt.Errorf("commit tree: %w", err)
 	}
@@ -787,9 +762,11 @@ func (c *VirtualTable) Commit() error {
 
 func (c *VirtualTable) Rollback() error {
 	dbg("ROLLBACK\n")
-	c.Tree.Root.Cancel()
-	c.Tree.Root = c.txStart
-	c.txStart = nil
+	if c.txStart != nil {
+		c.Tree.Root.Cancel()
+		c.Tree.Root = c.txStart
+		c.txStart = nil
+	}
 	return nil
 }
 
@@ -886,13 +863,13 @@ func GetTable(name string) *VirtualTable {
 	return tables[name]
 }
 
-func Vacuum(tableName string, beforeTime time.Time) error {
+func Vacuum(ctx context.Context, tableName string, beforeTime time.Time) error {
 	table := GetTable(tableName)
 	if table == nil {
 		return fmt.Errorf("table not found: %s", tableName)
 	}
 
-	db, err := table.Tree.Root.Clone(table.Ctx)
+	db, err := table.Tree.Root.Clone(ctx)
 	if err != nil {
 		return fmt.Errorf("clone: %w", err)
 	}
@@ -901,11 +878,11 @@ func Vacuum(tableName string, beforeTime time.Time) error {
 			db.Cancel()
 		}
 	}()
-	tc, err := db.Cursor(table.Ctx)
+	tc, err := db.Cursor(ctx)
 	if err != nil {
 		return fmt.Errorf("cursor: %w", err)
 	}
-	err = tc.Min(table.Ctx)
+	err = tc.Min(ctx)
 	if err != nil {
 		return fmt.Errorf("min: %w", err)
 	}
@@ -918,32 +895,39 @@ func Vacuum(tableName string, beforeTime time.Time) error {
 			row := v.Value.(*v1proto.Row)
 			rowTime := time.Unix(0, v.ModEpochNanos)
 			if row.Deleted && rowTime.Add(row.DeleteUpdateOffset.AsDuration()).Before(beforeTime) {
-				err = db.Tombstone(table.Ctx, time.Time{}, k)
+				err = db.Tombstone(ctx, time.Time{}, k)
 				if err != nil {
 					return fmt.Errorf("tombstone %v: %w", k, err)
 				}
 			}
 		}
-		err = tc.Forward(table.Ctx)
+		err = tc.Forward(ctx)
 		if err != nil {
 			return fmt.Errorf("cursor forward: %w", err)
 		}
 	}
-	err = db.RemoveTombstones(table.Ctx, beforeTime)
+	err = db.RemoveTombstones(ctx, beforeTime)
 	if err != nil {
 		return fmt.Errorf("s3db commit tombstones: %w", err)
 	}
-	_, err = db.Commit(table.Ctx)
+	_, err = db.Commit(ctx)
 	if err != nil {
 		return fmt.Errorf("s3db commit tombstones: %w", err)
 	}
 	table.Tree.Root = db
 	db = nil
 
-	err = kv.DeleteHistoricVersions(table.Ctx, table.Tree.Root, beforeTime)
+	err = kv.DeleteHistoricVersions(ctx, table.Tree.Root, beforeTime)
 	if err != nil {
 		return fmt.Errorf("s3db vacuum: %w", err)
 	}
 
 	return nil
+}
+
+func updateTime(ctx context.Context) time.Time {
+	if t, ok := writetime.FromContext(ctx); ok {
+		return t
+	}
+	return time.Now()
 }

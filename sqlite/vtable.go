@@ -1,22 +1,49 @@
 package mod
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.riyazali.net/sqlite"
 
 	"github.com/jrhy/s3db"
 	"github.com/jrhy/s3db/kv"
+	"github.com/jrhy/s3db/writetime"
 )
 
-type Module struct{}
+type S3DBConn struct {
+	ctx              context.Context
+	ctxCancel        func()
+	deadline         time.Time
+	writeTime        time.Time
+	txFixedWriteTime bool
+}
+
+func (sc *S3DBConn) ResetContext() {
+	if sc.ctxCancel != nil {
+		sc.ctxCancel()
+		sc.ctxCancel = nil
+	}
+	sc.ctx = context.Background()
+	if !sc.deadline.IsZero() {
+		sc.ctx, sc.ctxCancel = context.WithDeadline(sc.ctx, sc.deadline)
+	}
+	if !sc.writeTime.IsZero() {
+		sc.ctx = writetime.NewContext(sc.ctx, sc.writeTime)
+	}
+}
+
+type Module struct {
+	sc *S3DBConn
+}
 
 func (c *Module) Connect(conn *sqlite.Conn, args []string,
 	declare func(string) error) (sqlite.VirtualTable, error) {
 
 	args = args[2:]
-	table, err := s3db.New(args)
+	table, err := s3db.New(c.sc.ctx, args)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +53,10 @@ func (c *Module) Connect(conn *sqlite.Conn, args []string,
 		return nil, fmt.Errorf("declare: %w", err)
 	}
 
-	vt := &VirtualTable{common: table}
+	vt := &VirtualTable{
+		module: c,
+		common: table,
+	}
 
 	return vt, nil
 }
@@ -38,7 +68,10 @@ func (c *Module) Create(conn *sqlite.Conn, args []string, declare func(string) e
 
 type VirtualTable struct {
 	common *s3db.VirtualTable
+	module *Module
 }
+
+var _ sqlite.TwoPhaseCommitter = (*VirtualTable)(nil)
 
 func mapOp(in sqlite.ConstraintOp, usable bool) s3db.Op {
 	if !usable {
@@ -102,12 +135,19 @@ func (c *VirtualTable) Open() (sqlite.VirtualCursor, error) {
 	if err != nil {
 		return nil, toSqlite(err)
 	}
-	return &Cursor{common: common}, nil
+	return &Cursor{
+		common: common,
+		ctx:    c.module.sc.ctx,
+	}, nil
 }
 
 func (c *VirtualTable) Disconnect() error {
 	if err := toSqlite(c.common.Disconnect()); err != nil {
 		return err
+	}
+	if c.module.sc.ctxCancel != nil {
+		c.module.sc.ctxCancel()
+		c.module.sc.ctxCancel = nil
 	}
 
 	return nil
@@ -119,10 +159,11 @@ func (c *VirtualTable) Destroy() error {
 
 type Cursor struct {
 	common *s3db.Cursor
+	ctx    context.Context
 }
 
 func (c *Cursor) Next() error {
-	return toSqlite(c.common.Next())
+	return toSqlite(c.common.Next(c.ctx))
 }
 
 func (c *Cursor) Column(ctx *sqlite.VirtualTableContext, i int) error {
@@ -158,7 +199,7 @@ func (c *Cursor) Filter(_ int, idxStr string, values ...sqlite.Value) error {
 	for i := range values {
 		es[i] = valueToGo(values[i])
 	}
-	return toSqlite(c.common.Filter(idxStr, es))
+	return toSqlite(c.common.Filter(c.ctx, idxStr, es))
 }
 func (c *Cursor) Rowid() (int64, error) {
 	i, err := c.common.Rowid()
@@ -169,33 +210,33 @@ func (c *Cursor) Close() error { return toSqlite(c.common.Close()) }
 
 func init() {
 	sqlite.Register(func(api *sqlite.ExtensionApi) (sqlite.ErrorCode, error) {
-		err := api.CreateModule("s3db", &Module{},
-			func(opts *sqlite.ModuleOptions) {
-				opts.ReadOnly = false
-				opts.Transactional = true
-			})
+		sc := &S3DBConn{
+			ctx: context.Background(),
+		}
+		err := api.CreateModule("s3db", &Module{sc},
+			sqlite.ReadOnly(false), sqlite.Transaction(true),
+			sqlite.TwoPhaseCommit(true))
 		if err != nil {
 			return sqlite.SQLITE_ERROR, err
 		}
-		err = api.CreateModule("s3db_changes", &ChangesModule{},
-			func(opts *sqlite.ModuleOptions) {
-				opts.ReadOnly = true
-			})
+		err = api.CreateModule("s3db_changes", &ChangesModule{sc})
 		if err != nil {
 			return sqlite.SQLITE_ERROR, err
 		}
-		if err := api.CreateFunction("s3db_refresh", &RefreshFunc{}); err != nil {
+		err = api.CreateModule("s3db_conn", &ConnModule{sc},
+			sqlite.ReadOnly(false),
+			sqlite.EponymousOnly(true))
+		if err != nil {
+			return sqlite.SQLITE_ERROR, err
+		}
+		if err := api.CreateFunction("s3db_refresh", &RefreshFunc{sc}); err != nil {
 			return sqlite.SQLITE_ERROR, fmt.Errorf("s3db_refresh: %w", err)
 		}
-		err = api.CreateModule("s3db_vacuum", &VacuumModule{},
-			func(opts *sqlite.ModuleOptions) {
-				opts.ReadOnly = true
-				opts.EponymousOnly = true
-			})
+		err = api.CreateModule("s3db_vacuum", &VacuumModule{sc}, sqlite.EponymousOnly(true))
 		if err != nil {
 			return sqlite.SQLITE_ERROR, fmt.Errorf("s3db_vacuum: %w", err)
 		}
-		if err := api.CreateFunction("s3db_version", &VersionFunc{}); err != nil {
+		if err := api.CreateFunction("s3db_version", &VersionFunc{sc}); err != nil {
 			return sqlite.SQLITE_ERROR, fmt.Errorf("s3db_version: %w", err)
 		}
 		return sqlite.SQLITE_OK, nil
@@ -230,7 +271,7 @@ func valueToGo(value sqlite.Value) interface{} {
 }
 
 func (c *VirtualTable) Insert(values ...sqlite.Value) (int64, error) {
-	i, err := c.common.Insert(valuesToGo(values))
+	i, err := c.common.Insert(c.module.sc.ctx, valuesToGo(values))
 	return i, toSqlite(err)
 }
 
@@ -248,7 +289,7 @@ func toSqlite(err error) error {
 }
 
 func (c *VirtualTable) Update(value sqlite.Value, values ...sqlite.Value) error {
-	return toSqlite(c.common.Update(valueToGo(value), valuesToGo(values)))
+	return toSqlite(c.common.Update(c.module.sc.ctx, valueToGo(value), valuesToGo(values)))
 }
 
 func (c *VirtualTable) Replace(oldValue, newValue sqlite.Value, values ...sqlite.Value) error {
@@ -263,15 +304,15 @@ func (c *VirtualTable) Replace(oldValue, newValue sqlite.Value, values ...sqlite
 	if newValue.NoChange() {
 		newValue = oldValue
 	} else {
-		backup, err = c.common.Tree.Root.Clone(c.common.Ctx)
+		backup, err = c.common.Tree.Root.Clone(c.module.sc.ctx)
 		if err != nil {
 			return fmt.Errorf("clone: %w", err)
 		}
-		if err := c.common.Delete(valueToGo(oldValue)); err != nil {
+		if err := c.common.Delete(c.module.sc.ctx, valueToGo(oldValue)); err != nil {
 			return fmt.Errorf("delete: %w", err)
 		}
 	}
-	if _, err := c.common.Insert(valuesToGo(values)); err != nil {
+	if _, err := c.common.Insert(c.module.sc.ctx, valuesToGo(values)); err != nil {
 		c.common.Tree.Root.Cancel()
 		c.common.Tree.Root = backup
 		return fmt.Errorf("update: %w", err)
@@ -281,17 +322,41 @@ func (c *VirtualTable) Replace(oldValue, newValue sqlite.Value, values ...sqlite
 }
 
 func (c *VirtualTable) Delete(value sqlite.Value) error {
-	return toSqlite(c.common.Delete(valueToGo(value)))
+	return toSqlite(c.common.Delete(c.module.sc.ctx, valueToGo(value)))
 }
 
 func (c *VirtualTable) Begin() error {
-	return toSqlite(c.common.Begin())
+	if c.module.sc.writeTime.IsZero() {
+		c.module.sc.writeTime = time.Now()
+		c.module.sc.txFixedWriteTime = true
+		c.module.sc.ResetContext()
+	}
+	return toSqlite(c.common.Begin(c.module.sc.ctx))
 }
 
 func (c *VirtualTable) Commit() error {
-	return toSqlite(c.common.Commit())
+	if c.module.sc.txFixedWriteTime {
+		c.module.sc.writeTime = time.Time{}
+		c.module.sc.txFixedWriteTime = false
+		c.module.sc.ResetContext()
+	}
+	return nil
+}
+
+func (c *VirtualTable) Sync() error {
+	if c.common.S3Options.ReadOnly {
+		return nil
+	}
+
+	return toSqlite(c.common.Commit(c.module.sc.ctx))
 }
 
 func (c *VirtualTable) Rollback() error {
-	return toSqlite(c.common.Rollback())
+	res := toSqlite(c.common.Rollback())
+	if c.module.sc.txFixedWriteTime {
+		c.module.sc.writeTime = time.Time{}
+		c.module.sc.txFixedWriteTime = false
+		c.module.sc.ResetContext()
+	}
+	return res
 }

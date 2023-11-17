@@ -9,7 +9,9 @@ import (
 	"go.riyazali.net/sqlite"
 )
 
-type VacuumModule struct{}
+type VacuumModule struct {
+	sc *S3DBConn
+}
 
 func (c *VacuumModule) Connect(conn *sqlite.Conn, args []string,
 	declare func(string) error) (sqlite.VirtualTable, error) {
@@ -23,10 +25,14 @@ func (c *VacuumModule) Connect(conn *sqlite.Conn, args []string,
 		return nil, fmt.Errorf("declare: %w", err)
 	}
 
-	return &VacuumModule{}, nil
+	return &VacuumTable{module: c}, nil
 }
 
-func (vm *VacuumModule) BestIndex(input *sqlite.IndexInfoInput) (*sqlite.IndexInfoOutput, error) {
+type VacuumTable struct {
+	module *VacuumModule
+}
+
+func (vt *VacuumTable) BestIndex(input *sqlite.IndexInfoInput) (*sqlite.IndexInfoOutput, error) {
 	used := make([]*sqlite.ConstraintUsage, len(input.Constraints))
 	colUsed := make(map[int]bool)
 	for i, c := range input.Constraints {
@@ -48,18 +54,19 @@ func (vm *VacuumModule) BestIndex(input *sqlite.IndexInfoInput) (*sqlite.IndexIn
 	return res, nil
 }
 
-func (vm *VacuumModule) Open() (sqlite.VirtualCursor, error) {
-	return &VacuumCursor{}, nil
+func (vt *VacuumTable) Open() (sqlite.VirtualCursor, error) {
+	return &VacuumCursor{module: vt.module}, nil
 }
 
-func (vm *VacuumModule) Disconnect() error { return nil }
-func (vm *VacuumModule) Destroy() error    { return nil }
+func (vt *VacuumTable) Disconnect() error { return nil }
+func (vt *VacuumTable) Destroy() error    { return nil }
 
 type VacuumCursor struct {
 	tableName  string
 	beforeTime time.Time
 	vacuumErr  error
 	eof        bool
+	module     *VacuumModule
 }
 
 func (vc *VacuumCursor) Next() error {
@@ -106,6 +113,6 @@ func (vc *VacuumCursor) Filter(_ int, idxStr string, values ...sqlite.Value) err
 	}
 	vc.beforeTime = t
 
-	vc.vacuumErr = s3db.Vacuum(vc.tableName, t)
+	vc.vacuumErr = s3db.Vacuum(vc.module.sc.ctx, vc.tableName, t)
 	return nil
 }
