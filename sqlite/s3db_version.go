@@ -9,7 +9,9 @@ import (
 	"github.com/jrhy/s3db"
 )
 
-type VersionFunc struct{}
+type VersionFunc struct {
+	sc *S3DBConn
+}
 
 func (h *VersionFunc) Args() int           { return 1 }
 func (h *VersionFunc) Deterministic() bool { return false }

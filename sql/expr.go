@@ -475,29 +475,32 @@ func binaryArithmetic(
 
 /*
 func binaryComparison(
+
 	inputs []types.Evaluator,
 	intFunc func(int64, int64) (bool, bool),
 	realFunc func(float64, float64) bool,
-) types.Evaluator {
-	arithmeticEvaluator := binaryArithmetic(inputs,
-		func(a, b int64) (int64, bool) {
-		if res, _ := intFunc(a,b); res { return 1, true }
-		return 0, true
-	}, func(a, b float64) float64 {
-		if realFunc(a,b) { return 1.0 }
-		return 0.0
-	})
-	inner := arithmeticEvaluator.Func
-	arithmeticEvaluator.Func =
-		func(inputs map[string]colval.ColumnValue) colval.ColumnValue {
-			cv :=  inner(inputs)
-			if r, isReal := cv.(colval.Real) {
-				return colval.Int(int64(r))
-			}
-		}
 
-	return arithmeticEvaluator
-}*/
+	) types.Evaluator {
+		arithmeticEvaluator := binaryArithmetic(inputs,
+			func(a, b int64) (int64, bool) {
+			if res, _ := intFunc(a,b); res { return 1, true }
+			return 0, true
+		}, func(a, b float64) float64 {
+			if realFunc(a,b) { return 1.0 }
+			return 0.0
+		})
+		inner := arithmeticEvaluator.Func
+		arithmeticEvaluator.Func =
+			func(inputs map[string]colval.ColumnValue) colval.ColumnValue {
+				cv :=  inner(inputs)
+				if r, isReal := cv.(colval.Real) {
+					return colval.Int(int64(r))
+				}
+			}
+
+		return arithmeticEvaluator
+	}
+*/
 func binaryComparison(
 	inputs []types.Evaluator,
 	intFunc func(int64, int64) bool,

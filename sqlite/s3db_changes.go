@@ -16,13 +16,17 @@ import (
 	v1proto "github.com/jrhy/s3db/proto/v1"
 )
 
-type ChangesModule struct{}
+type ChangesModule struct {
+	sc *S3DBConn
+}
 
 func (c *ChangesModule) Connect(conn *sqlite.Conn, args []string,
 	declare func(string) error) (sqlite.VirtualTable, error) {
 
 	var err error
-	res := &ChangesTable{}
+	res := &ChangesTable{
+		module: c,
+	}
 	args = args[3:]
 
 	if len(args) == 0 {
@@ -99,7 +103,8 @@ func (c *ChangesTable) BestIndex(input *sqlite.IndexInfoInput) (*sqlite.IndexInf
 }
 
 type ChangesTable struct {
-	table *s3db.VirtualTable
+	table  *s3db.VirtualTable
+	module *ChangesModule
 
 	fromVer []string
 	toVer   []string
@@ -113,26 +118,28 @@ func loadForDiffing(ctx context.Context, baseOptions s3db.S3Options, versions []
 }
 
 func (c *ChangesTable) Open() (sqlite.VirtualCursor, error) {
+	ctx := c.module.sc.ctx
 	var from *s3db.KV
 	var err error
 	if c.fromVer == nil {
 		from = c.table.Tree
 	} else {
-		from, err = loadForDiffing(c.table.Ctx, c.table.S3Options, c.fromVer)
+		from, err = loadForDiffing(ctx, c.table.S3Options, c.fromVer)
 		if err != nil {
 			return nil, fmt.Errorf("from: %w", err)
 		}
 	}
-	to, err := loadForDiffing(c.table.Ctx, c.table.S3Options, c.toVer)
+	to, err := loadForDiffing(ctx, c.table.S3Options, c.toVer)
 	if err != nil {
 		return nil, fmt.Errorf("to: %w", err)
 	}
 
-	dc, err := to.Root.StartDiff(c.table.Ctx, from.Root)
+	dc, err := to.Root.StartDiff(ctx, from.Root)
 	if err != nil {
 		return nil, toSqlite(err)
 	}
 	return &ChangesCursor{
+		module:     c.module,
 		t:          c.table,
 		diffCursor: dc,
 	}, nil
@@ -147,6 +154,7 @@ func (c *ChangesTable) Destroy() error {
 }
 
 type ChangesCursor struct {
+	module     *ChangesModule
 	t          *s3db.VirtualTable
 	currentKey *s3db.Key
 	currentRow *v1proto.Row
@@ -159,7 +167,7 @@ func (c *ChangesCursor) Next() error {
 		return nil
 	}
 	for {
-		de, err := c.diffCursor.NextEntry(c.t.Ctx)
+		de, err := c.diffCursor.NextEntry(c.module.sc.ctx)
 		if err == mast.ErrNoMoreDiffs {
 			c.eof = true
 			return nil

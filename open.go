@@ -23,14 +23,13 @@ type KV struct {
 
 var (
 	inMemoryS3Lock sync.Mutex
-	inMemoryS3 *s3.S3
+	inMemoryS3     *s3.S3
 	inMemoryBucket string
 )
 
 func OpenKV(ctx context.Context, s3opts S3Options, subdir string) (*KV, error) {
 	var err error
 	var c kv.S3Interface
-	var closer func()
 	if s3opts.Bucket == "" {
 		if s3opts.Endpoint != "" {
 			return nil, fmt.Errorf("s3_endpoint specified without s3_bucket")
@@ -81,8 +80,7 @@ func OpenKV(ctx context.Context, s3opts S3Options, subdir string) (*KV, error) {
 	}
 	dbg("%s size:%d\n", subdir, s.Size())
 	return &KV{
-		Root:   s,
-		Closer: closer,
+		Root: s,
 	}, nil
 }
 

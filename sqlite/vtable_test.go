@@ -221,6 +221,17 @@ func mustParseTime(f, s string) time.Time {
 }
 
 func Test(t *testing.T) {
+	openTable := func(t *testing.T, name string, db *sql.DB, s3Bucket, s3Endpoint string) {
+		stmt := fmt.Sprintf(`create virtual table "%s" using s3db (
+s3_bucket='%s',
+s3_endpoint='%s',
+s3_prefix='%s',
+columns='a primary key, b')`,
+			name, s3Bucket, s3Endpoint, t.Name())
+		_, err := db.Exec(stmt)
+		require.NoError(t, err)
+	}
+
 	t.Run("1", func(t *testing.T) {
 		db, s3Bucket, s3Endpoint := openDB()
 		defer db.Close()
@@ -390,44 +401,43 @@ columns='a')`,
 		db, s3Bucket, s3Endpoint := openDB()
 		defer db.Close()
 
-		openTableWithWriteTime := func(t *testing.T, name, tm string) {
-			mustParseTime(s3db.SQLiteTimeFormat, tm)
-			stmt := fmt.Sprintf(`create virtual table "%s" using s3db (
-s3_bucket='%s',
-s3_endpoint='%s',
-s3_prefix='%s',
-columns='a primary key, b',
-write_time='%s')`,
-				name, s3Bucket, s3Endpoint, t.Name(), tm)
-			_, err := db.Exec(stmt)
-			require.NoError(t, err)
+		type testCase struct {
+			firstWriteTime  string
+			secondWriteTime string
+			expectedWinner  string
 		}
-
-		for i, openerWithLatestWriteTime := range []func(*testing.T) string{
-			func(t *testing.T) (expectedWinner string) {
-				openTableWithWriteTime(t, t.Name()+"1", "2006-01-01 00:00:00")
-				openTableWithWriteTime(t, t.Name()+"2", "2007-01-01 00:00:00")
-				return "two"
+		cases := []testCase{
+			{
+				firstWriteTime:  "2006-01-01 00:00:00",
+				secondWriteTime: "2007-01-01 00:00:00",
+				expectedWinner:  "second",
 			},
-			func(t *testing.T) (expectedWinner string) {
-				openTableWithWriteTime(t, t.Name()+"2", "2006-01-01 00:00:00")
-				openTableWithWriteTime(t, t.Name()+"1", "2007-01-01 00:00:00")
-				return "one"
+			{
+				firstWriteTime:  "2007-01-01 00:00:00",
+				secondWriteTime: "2006-01-01 00:00:00",
+				expectedWinner:  "first",
 			},
-		} {
+		}
+		for _, c := range cases {
+			t.Run(c.expectedWinner, func(t *testing.T) {
+				openTable(t, t.Name()+"1", db, s3Bucket, s3Endpoint)
+				openTable(t, t.Name()+"2", db, s3Bucket, s3Endpoint)
 
-			t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-				expectedWinner := openerWithLatestWriteTime(t)
-
-				_, err := db.Exec(fmt.Sprintf(`insert into "%s" values('row','one')`, t.Name()+"1"))
+				_, err := db.Exec(`update s3db_conn set write_time=?`, c.firstWriteTime)
 				require.NoError(t, err)
-				_, err = db.Exec(fmt.Sprintf(`insert into "%s" values('row','two')`, t.Name()+"2"))
+				_, err = db.Exec(fmt.Sprintf(`insert into "%s" values('row','first')`, t.Name()+"1"))
+				require.NoError(t, err)
+				_, err = db.Exec(`update s3db_conn set write_time=?`, c.secondWriteTime)
+				require.NoError(t, err)
+				_, err = db.Exec(fmt.Sprintf(`insert into "%s" values('row','second')`, t.Name()+"2"))
 				require.NoError(t, err)
 
-				openTableWithWriteTime(t, t.Name()+"read", "2008-01-01 00:00:00")
+				_, err = db.Exec(`update s3db_conn set write_time=?`, "2006-01-01 00:00:00")
+				require.NoError(t, err)
+				openTable(t, t.Name()+"read", db, s3Bucket, s3Endpoint)
 				query := fmt.Sprintf(`select * from "%s"`, t.Name()+"read")
 				require.Equal(t,
-					fmt.Sprintf(`[["row","%s"]]`, expectedWinner),
+					fmt.Sprintf(`[["row","%s"]]`, c.expectedWinner),
 					mustQueryToJSON(db, query))
 			})
 		}
@@ -462,36 +472,31 @@ write_time='%s')`,
 			db, s3Bucket, s3Endpoint := openDB()
 			defer db.Close()
 
-			openTableWithWriteTime := func(t *testing.T, name, tm string) {
-				mustParseTime(s3db.SQLiteTimeFormat, tm)
-				stmt := fmt.Sprintf(`create virtual table "%s" using s3db (
-s3_bucket='%s',
-s3_endpoint='%s',
-s3_prefix='%s',
-columns='a primary key, b',
-write_time='%s')`,
-					name, s3Bucket, s3Endpoint, t.Name(), tm)
-				_, err := db.Exec(stmt)
-				require.NoError(t, err)
-			}
-
-			openTableWithWriteTime(t, "v1", "2006-01-01 00:00:00")
-			_, err := db.Exec(`insert into v1 values(2006,0)`)
+			openTable(t, "v1", db, s3Bucket, s3Endpoint)
+			_, err := db.Exec(`update s3db_conn set write_time=?`, "2006-01-01 00:00:00")
+			require.NoError(t, err)
+			_, err = db.Exec(`insert into v1 values(2006,0)`)
 			require.NoError(t, err)
 			_, err = db.Exec(`delete from v1`)
 			require.NoError(t, err)
 			require.Equal(t, `null`, mustQueryToJSON(db, `select * from v1`))
 
-			openTableWithWriteTime(t, "v2", "2007-01-01 00:00:00")
+			openTable(t, "v2", db, s3Bucket, s3Endpoint)
+			_, err = db.Exec(`update s3db_conn set write_time=?`, "2007-01-01 00:00:00")
+			require.NoError(t, err)
 			_, err = db.Exec(`insert into v2 values(2007,0)`)
 			require.NoError(t, err)
 			require.Equal(t, `[[2007,0]]`, mustQueryToJSON(db, `select * from v2`))
 
-			openTableWithWriteTime(t, "vacuumv1", "2008-01-01 00:00:00")
+			_, err = db.Exec(`update s3db_conn set write_time=?`, "2008-01-01 00:00:00")
+			require.NoError(t, err)
+			openTable(t, "vacuumv1", db, s3Bucket, s3Endpoint)
 			require.Equal(t,
 				`[[null]]`,
 				mustQueryToJSON(db, "select * from s3db_vacuum('vacuumv1','2007-01-01 00:00:00');"))
-			openTableWithWriteTime(t, "readv2", "2009-01-01 00:00:00")
+			_, err = db.Exec(`update s3db_conn set write_time=?`, "2009-01-01 00:00:00")
+			require.NoError(t, err)
+			openTable(t, "readv2", db, s3Bucket, s3Endpoint)
 			require.Equal(t, `[[2007,0]]`, mustQueryToJSON(db, `select * from readv2`))
 		})
 
@@ -621,4 +626,23 @@ columns='a primary key, b')`,
 	var roots []string
 	require.NoError(t, json.Unmarshal(current_version_json, &roots))
 	require.Equal(t, 2, len(roots))
+}
+
+func TestDeadline(t *testing.T) {
+	db, s3Bucket, s3Endpoint := openDB()
+	defer db.Close()
+
+	_, err := db.Exec(fmt.Sprintf(`create virtual table deadline using s3db (
+s3_bucket='%s',
+s3_endpoint='%s',
+s3_prefix='deadline',
+columns='a')`,
+		s3Bucket, s3Endpoint))
+	require.NoError(t, err)
+
+	_, err = db.Exec(`UPDATE s3db_conn SET deadline=CURRENT_TIMESTAMP`)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`INSERT INTO deadline VALUES($1)`, 1)
+	require.ErrorContains(t, err, "context deadline exceeded")
 }
