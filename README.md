@@ -4,6 +4,7 @@ What's New?
 ===========
 
 v0.1.35 adds the `s3db_conn` table for per-connection `deadline` and `write_time` attributes.
+
 v0.1.33 adds s3db_changes() and s3db_version()
 
 Getting Started
