@@ -13,7 +13,7 @@ Getting Started
 Check that your sqlite can load extensions. 
 ```
 $ sqlite3
-SQLite version 3.44.0 2023-11-01 11:23:50
+SQLite version 3.45.0 2024-01-15 17:01:13
 Enter ".help" for usage hints.
 Connected to a transient in-memory database.
 Use ".open FILENAME" to reopen on a persistent database.

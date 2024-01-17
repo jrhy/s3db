@@ -33,11 +33,11 @@ CGO_ENABLED=1 GOOS=linux GOARCH=amd64 CC="zig cc -target x86_64-linux-gnu" go ge
 cd ../..
 
 # cross-compile sqlite
-if ! [ -f /tmp/sqlite-amalgamation-3420000/sqlite-arm ] ; then
+if ! [ -f /tmp/sqlite-amalgamation-3450000/sqlite-arm ] ; then
 	pushd /tmp
-	curl -LO https://www.sqlite.org/2023/sqlite-amalgamation-3420000.zip
-	unzip sqlite-amalgamation-3420000.zip
-	cd sqlite-amalgamation-3420000
+	curl -LO https://www.sqlite.org/2024/sqlite-amalgamation-3450000.zip
+	unzip sqlite-amalgamation-3450000.zip
+	cd sqlite-amalgamation-3450000
 	zig cc -target arm-linux-gnueabihf -o sqlite-arm *.c
 	zig cc -target aarch64-linux-gnu -o sqlite-arm64 *.c
 	zig cc -target x86_64-linux-gnu -o sqlite-amd64 *.c
@@ -46,9 +46,9 @@ fi
 
 # verify each target can load the extension
 set +o pipefail
-( qemu-arm -L /usr/arm-linux-gnueabihf/ /tmp/sqlite-amalgamation-3420000/sqlite-arm -bail -cmd ".load release/s3db-linux-arm-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for arm ; exit 1 )
-( qemu-aarch64 -L /usr/aarch64-linux-gnu/ /tmp/sqlite-amalgamation-3420000/sqlite-arm64 -bail -cmd ".load release/s3db-linux-arm64-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for arm64 ; exit 1 )
-( qemu-x86_64 -L /usr/x86_64-linux-gnu/ /tmp/sqlite-amalgamation-3420000/sqlite-amd64 -bail -cmd ".load release/s3db-linux-amd64-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for amd64 ; exit 1 )
+( qemu-arm -L /usr/arm-linux-gnueabihf/ /tmp/sqlite-amalgamation-3450000/sqlite-arm -bail -cmd ".load release/s3db-linux-arm-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for arm ; exit 1 )
+( qemu-aarch64 -L /usr/aarch64-linux-gnu/ /tmp/sqlite-amalgamation-3450000/sqlite-arm64 -bail -cmd ".load release/s3db-linux-arm64-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for arm64 ; exit 1 )
+( qemu-x86_64 -L /usr/x86_64-linux-gnu/ /tmp/sqlite-amalgamation-3450000/sqlite-amd64 -bail -cmd ".load release/s3db-linux-amd64-glibc.sqlite-ext.so" -cmd "create virtual table f using s3db" 2>&1 | grep 'columns and constraints' ) || ( echo failed to load s3db extension for amd64 ; exit 1 )
 
 cd release
 gzip -9 *
