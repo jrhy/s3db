@@ -8,7 +8,7 @@ require (
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/johannesboyne/gofakes3 v0.0.0-20240117152127-f7e9c41d81b2
 	github.com/johncgriffin/overflow v0.0.0-20211019200055-46fa312c352c
-	github.com/jrhy/mast v1.2.27
+	github.com/jrhy/mast v1.2.28
 	github.com/mattn/go-sqlite3 v1.14.20
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/segmentio/ksuid v1.0.4
