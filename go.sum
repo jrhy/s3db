@@ -97,8 +97,8 @@ github.com/johannesboyne/gofakes3 v0.0.0-20240117152127-f7e9c41d81b2 h1:SRQawDd/
 github.com/johannesboyne/gofakes3 v0.0.0-20240117152127-f7e9c41d81b2/go.mod h1:AxgWC4DDX54O2WDoQO1Ceabtn6IbktjU/7bigor+66g=
 github.com/johncgriffin/overflow v0.0.0-20211019200055-46fa312c352c h1:2n/HCxBM7oa5PNCPKIhV26EtJkaPXFfcVojPAT3ujTU=
 github.com/johncgriffin/overflow v0.0.0-20211019200055-46fa312c352c/go.mod h1:B9OPZOhZ3FIi6bu54lAgCMzXLh11Z7ilr3rOr/ClP+E=
-github.com/jrhy/mast v1.2.27 h1:GmU8Wvl/AMMM7vPGpFlUGHgBzaJpHurEe5K1uCyKmj8=
-github.com/jrhy/mast v1.2.27/go.mod h1:98pVvJ8+mwE3u4GpTi1QDjyg9AHZfYQGUkTXHpyras8=
+github.com/jrhy/mast v1.2.28 h1:KwKxtatnSUkaRP25pIZi2Pmgx85vDA9yHZWizxKpXXY=
+github.com/jrhy/mast v1.2.28/go.mod h1:nIeuiTlADHwOnY7bkm6oYPxLUq356ZXIQ5nCNWirZik=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/klauspost/compress v1.17.5 h1:d4vBd+7CHydUqpFBgUEKkSdtSugf9YFmSkvUYPquI5E=
