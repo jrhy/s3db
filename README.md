@@ -128,7 +128,7 @@ original request time to avoid undoing later updates in retries.
 
 Building from Source
 ====================
-Requires Go >=1.19. 
+Requires Go >=1.22.
 ```
 go vet ./...
 go generate ./sqlite/sharedlib
@@ -147,7 +147,7 @@ See [sqlite/example-go-app/](sqlite/example-go-app/) for an example.
 
 Function Reference
 ==================
-`s3db_refresh(`*tablename*`)` reopens a table and to show updates from
+`s3db_refresh(`*tablename*`)` reopens a table to show updates from
 other writers.
 
 `s3db_version(`*tablename*`)` returns a list of the versions merged to
