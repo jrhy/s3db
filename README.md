@@ -13,7 +13,7 @@ Getting Started
 Check that your sqlite can load extensions. 
 ```
 $ sqlite3
-SQLite version 3.46.0 2024-03-21 22:18:24
+SQLite version 3.46.0 2024-05-23 13:25:27
 Enter ".help" for usage hints.
 Connected to a transient in-memory database.
 Use ".open FILENAME" to reopen on a persistent database.
@@ -61,7 +61,7 @@ sqlite> insert into mytable values (1,'jeff','old_address@example.org');
 
 ```
 $ sqlite3 mydb.sqlite -cmd '.load ./s3db'
-SQLite version 3.41.0 2023-02-21 18:09:37
+SQLite version 3.46.0 2024-05-23 13:25:27
 Enter ".help" for usage hints.
 sqlite> select * from mytable;
 ┌────┬──────┬─────────────────────────┐
