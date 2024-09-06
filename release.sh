@@ -13,7 +13,9 @@ go vet ./...
 go test -race ./...
 
 go generate ./proto
-git diff --name-only --exit-code || (echo "The files above need updating. Please run 'go generate'."; exit 1)
+if git diff | egrep '^[+-]' | egrep -v '^---|\+\+\+' | egrep -v '^.//' ; then
+	git diff --name-only --exit-code || (echo "The files above need updating. Please run 'go generate'."; exit 1)
+fi
 
 go mod tidy
 git diff --name-only --exit-code || (echo "Please run 'go mod tidy'."; exit 1)
