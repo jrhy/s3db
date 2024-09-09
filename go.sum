@@ -27,8 +27,8 @@ github.com/antlr4-go/antlr/v4 v4.13.1/go.mod h1:GKmUxMtwp6ZgGwZSva4eWPC5mS6vUAmO
 github.com/aws/aws-sdk-go v1.44.256/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
 github.com/aws/aws-sdk-go v1.55.5 h1:KKUZBfBoyqy5d3swXyiC7Q76ic40rYcbqH7qjh59kzU=
 github.com/aws/aws-sdk-go v1.55.5/go.mod h1:eRwEWoyTWFMVYVQzKMNHWP5/RV4xIUGMQfXQHfHkpNU=
-github.com/bufbuild/buf v1.40.0 h1:EWiJiZsJumV0z8sPVjGx+3e8IxqAVv/Jg/4zG9bFxSI=
-github.com/bufbuild/buf v1.40.0/go.mod h1:PMkhwcFMP8d/aBJsvJL7GZq/CdeT7jwTS96RwFyKSU8=
+github.com/bufbuild/buf v1.40.1 h1:u99ME/yC6zzZH5yGfwmcTt46bxFqDfuvFuif/W9F3Qo=
+github.com/bufbuild/buf v1.40.1/go.mod h1:PMkhwcFMP8d/aBJsvJL7GZq/CdeT7jwTS96RwFyKSU8=
 github.com/bufbuild/bufplugin-go v0.1.0 h1:3LmgSHaSf8mPvwoFunimgm8uKJFLg+YePdi7NQgnfdY=
 github.com/bufbuild/bufplugin-go v0.1.0/go.mod h1:gIbsJlcYJRLylxxNN3FPNd91fYxJmGVQgbZ67xLVrXk=
 github.com/bufbuild/protocompile v0.14.1 h1:iA73zAf/fyljNjQKwYzUHD6AD4R8KMasmwa/FBatYVw=
