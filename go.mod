@@ -11,7 +11,7 @@ require (
 	github.com/johannesboyne/gofakes3 v0.0.0-20240926132034-df7f9c4f0eda
 	github.com/johncgriffin/overflow v0.0.0-20211019200055-46fa312c352c
 	github.com/jrhy/mast v1.2.31
-	github.com/mattn/go-sqlite3 v1.14.23
+	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/segmentio/ksuid v1.0.4
 	github.com/stretchr/testify v1.9.0
