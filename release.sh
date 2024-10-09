@@ -7,6 +7,7 @@ set -x
 
 mkdir release
 
+go env
 go version
 go get -t ./...
 go vet ./...
