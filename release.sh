@@ -18,7 +18,7 @@ if git diff | egrep '^[+-]' | egrep -v '^---|\+\+\+' | egrep -v '^.//' ; then
 fi
 
 go mod tidy
-git diff --name-only --exit-code || (echo "Please run 'go mod tidy'."; exit 1)
+git diff --name-only --exit-code go.mod || (echo "Please run 'go mod tidy'."; exit 1)
 
 # install zig and qemu-user
 which zig || ( cd /tmp && curl -LO https://ziglang.org/download/0.9.1/zig-linux-aarch64-0.9.1.tar.xz && ( xzcat zig*xz | tar xf - ) && cd zig*/ && ln -s `pwd`/zig /usr/bin/zig )
