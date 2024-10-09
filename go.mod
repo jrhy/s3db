@@ -18,7 +18,7 @@ require (
 	go.riyazali.net/sqlite v0.0.0-20230816114005-832d6b745bcd
 	golang.org/x/crypto v0.28.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
-	google.golang.org/protobuf v1.34.3-0.20240906163944-03df6c145d96
+	google.golang.org/protobuf v1.35.1
 )
 
 require (
