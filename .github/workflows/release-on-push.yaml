@@ -4,9 +4,11 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     name: Release
     steps:
+    - name: Install sqlite headers
+      run: sudo apt-get install -y libsqlite3-dev
     - uses: actions/checkout@v3
     - uses: actions/setup-go@v5
       with:
