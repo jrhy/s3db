@@ -165,7 +165,7 @@ CREATE VIRTUAL TABLE *tablename* USING s3db() arguments:
 * `columns='<colname> [primary key], ...',` columns and constraints
 * (optional) `entries_per_node=<N>,`            the number of rows to store in per S3 object (defaults to 4096)
 * (optional) `node_cache_entries=<N>,`          number of nodes to cache in memory (defaults to 0)
-* (optional) `readonlyl,`                       don't write to S3
+* (optional) `readonly,`                        don't write to S3
 * (optional) `s3_bucket='mybucket',`            defaults to in-memory bucket
 * (optional) `s3_endpoint='https://minio.example.com',` S3 endpoint, if not using AWS
 * (optional) `s3_prefix='/prefix',`             separate tables within a bucket

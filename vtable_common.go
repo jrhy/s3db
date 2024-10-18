@@ -78,7 +78,7 @@ usage:
                                    columns and constraints
 [entries_per_node=<N>,]            the number of rows to store in per S3 object (defaults to 4096)
 [node_cache_entries=<N>,]          number of nodes to cache in memory (defaults to 0)
-[readonlyl,]                       don't write to S3
+[readonly,]                        don't write to S3
 [s3_bucket='mybucket',]            defaults to in-memory bucket
 [s3_endpoint='https://minio.example.com',]
                                    S3 endpoint, if not using AWS
