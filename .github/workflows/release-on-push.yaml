@@ -7,8 +7,8 @@ jobs:
     runs-on: ubuntu-24.04
     name: Release
     steps:
-    - name: Install sqlite headers
-      run: sudo apt-get install -y libsqlite3-dev
+    - name: Install sqlite headers and cross-compilation packages
+      run: sudo apt-get install -y libsqlite3-dev qemu-user libc6-armhf-cross libc6-arm64-cross libc6-amd64-cross 
     - uses: actions/checkout@v4
     - uses: actions/setup-go@v5
       with:
