@@ -2,10 +2,10 @@ buf.build/gen/go/bufbuild/bufplugin/protocolbuffers/go v1.35.1-20241023225133-42
 buf.build/gen/go/bufbuild/bufplugin/protocolbuffers/go v1.35.1-20241023225133-42bdb4b67625.1/go.mod h1:rYPnjsUZ2lGpoQ/T322HWZQil9/MIZF2njP+/u/0GKg=
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.35.1-20240920164238-5a7b106cbb87.1 h1:9wP6ZZYWnF2Z0TxmII7m3XNykxnP4/w8oXeth6ekcRI=
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.35.1-20240920164238-5a7b106cbb87.1/go.mod h1:Duw/9JoXkXIydyASnLYIiufkzySThoqavOsF+IihqvM=
-buf.build/gen/go/bufbuild/registry/connectrpc/go v1.17.0-20241007185750-f2282fe532fe.1 h1:tVBsEQVsOz3Xsoy90GOefAgn6siKtfFZxsst39/hJNU=
-buf.build/gen/go/bufbuild/registry/connectrpc/go v1.17.0-20241007185750-f2282fe532fe.1/go.mod h1:of6bEOQJUQbBMVsPiLQiyD+yPRze0FClQv2u1CmgDdQ=
-buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.35.1-20241007185750-f2282fe532fe.1 h1:jvB3uNDZnP89xIFy8WHeYgCz86vv7mWRyv2Wgp+8hoI=
-buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.35.1-20241007185750-f2282fe532fe.1/go.mod h1:wDNiJdkMLOTfEL3o1lBgh+9EVhwGORcz+Aoq6hGk33Y=
+buf.build/gen/go/bufbuild/registry/connectrpc/go v1.17.0-20241025140216-aa40f2c93090.1 h1:FHQXg3T7S2jp8yc7/bQJgqEH1yza/rrDHXITUK2Tm0g=
+buf.build/gen/go/bufbuild/registry/connectrpc/go v1.17.0-20241025140216-aa40f2c93090.1/go.mod h1:5iwF5l+9lKCnvr1zLvDgUHrv6X+vU5nNPjvig1sbnao=
+buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.35.1-20241025140216-aa40f2c93090.1 h1:PyqnJojY+BXNuJHp5aEfN9wPiP1dzrobXVmgLrUMe+A=
+buf.build/gen/go/bufbuild/registry/protocolbuffers/go v1.35.1-20241025140216-aa40f2c93090.1/go.mod h1:x5Mti5bhMO87zJxCkcEbr7Lz+bHiFsqpxnpqSB1okG0=
 buf.build/gen/go/pluginrpc/pluginrpc/protocolbuffers/go v1.35.1-20241007202033-cf42259fcbfc.1 h1:rPi3qs3qpDIXIl5QW2IPOaYZhppRkvuVKwEZrfhpy78=
 buf.build/gen/go/pluginrpc/pluginrpc/protocolbuffers/go v1.35.1-20241007202033-cf42259fcbfc.1/go.mod h1:4IVMTaeh4JIjBYcGFLlTorfWpKVEXDjDfHAgKTeR0Ds=
 buf.build/go/bufplugin v0.6.0 h1:3lhoh+0z+IUPS3ZajTPn/27LaLIkero2BDVnV7yXD1s=
@@ -33,8 +33,8 @@ github.com/antlr4-go/antlr/v4 v4.13.1/go.mod h1:GKmUxMtwp6ZgGwZSva4eWPC5mS6vUAmO
 github.com/aws/aws-sdk-go v1.44.256/go.mod h1:aVsgQcEevwlmQ7qHE9I3h+dtQgpqhFB+i8Phjh7fkwI=
 github.com/aws/aws-sdk-go v1.55.5 h1:KKUZBfBoyqy5d3swXyiC7Q76ic40rYcbqH7qjh59kzU=
 github.com/aws/aws-sdk-go v1.55.5/go.mod h1:eRwEWoyTWFMVYVQzKMNHWP5/RV4xIUGMQfXQHfHkpNU=
-github.com/bufbuild/buf v1.45.0 h1:WdaM5OCjqEURmzOiz3h9gVilFXqWpt6X+zbOVqKti1A=
-github.com/bufbuild/buf v1.45.0/go.mod h1:j+GjGIKS+CvubKtPiC0KpEiHAd3wS9/5sn2/U5WlA20=
+github.com/bufbuild/buf v1.46.0 h1:QqlFiy2l0F+hhyTF9xm7j91E7ovGyZVnneG2y38F0rk=
+github.com/bufbuild/buf v1.46.0/go.mod h1:oN16LKwdlgji2eHLn3R07dxnQjxm9Q0pdUor5VXj3H8=
 github.com/bufbuild/protocompile v0.14.1 h1:iA73zAf/fyljNjQKwYzUHD6AD4R8KMasmwa/FBatYVw=
 github.com/bufbuild/protocompile v0.14.1/go.mod h1:ppVdAIhbr2H8asPk6k4pY7t9zB1OU5DoEw9xY/FUi1c=
 github.com/bufbuild/protoplugin v0.0.0-20240911180120-7bb73e41a54a h1:l3RhVoG0RtC61h6TVWnkniGj4TgBebuyPQRdleFAmTg=
