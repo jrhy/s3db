@@ -1,8 +1,7 @@
 module github.com/jrhy/s3db
 
 go 1.22.7
-
-toolchain go1.22.9
+toolchain go1.23.6
 
 require (
 	github.com/aws/aws-sdk-go v1.55.6
@@ -16,7 +15,7 @@ require (
 	github.com/segmentio/ksuid v1.0.4
 	github.com/stretchr/testify v1.10.0
 	go.riyazali.net/sqlite v0.0.0-20230816114005-832d6b745bcd
-	golang.org/x/crypto v0.33.0
+	golang.org/x/crypto v0.35.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
 	google.golang.org/protobuf v1.35.2
 )
