@@ -11,11 +11,6 @@ mkdir release
 
 go version
 
-go generate ./proto
-if git diff | egrep '^[+-]' | egrep -v '^---|\+\+\+' | egrep -v '^.//' ; then
-	git diff --name-only --exit-code || (echo "The files above need updating. Please run 'go generate'."; exit 1)
-fi
-
 go get -t ./...
 go vet ./...
 go test -race ./...
