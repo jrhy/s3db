@@ -1,6 +1,6 @@
 #!/usr/bin/env bash 
 
-SQLITE3_VERSION=3460100
+SQLITE3_VERSION=3490100
 
 set -o errexit
 set -o pipefail
@@ -39,7 +39,7 @@ cd ../..
 # cross-compile sqlite
 if ! [ -f /tmp/sqlite-amalgamation-$SQLITE3_VERSION/sqlite-arm ] ; then
 	pushd /tmp
-	curl -LO https://www.sqlite.org/2024/sqlite-amalgamation-$SQLITE3_VERSION.zip
+	curl -LO https://www.sqlite.org/2025/sqlite-amalgamation-$SQLITE3_VERSION.zip
 	unzip sqlite-amalgamation-$SQLITE3_VERSION.zip
 	cd sqlite-amalgamation-$SQLITE3_VERSION
 	zig cc -target arm-linux-gnueabihf -o sqlite-arm *.c
