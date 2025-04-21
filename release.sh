@@ -18,7 +18,7 @@ go mod tidy
 git diff --name-only --exit-code go.mod || (echo "Please run 'go mod tidy'."; exit 1)
 
 # install zig and qemu-user
-which zig || ( cd /tmp && curl -LO https://ziglang.org/download/0.9.1/zig-linux-aarch64-0.9.1.tar.xz && ( xzcat zig*xz | tar xf - ) && cd zig*/ && ln -s `pwd`/zig /usr/bin/zig )
+which zig || ( cd /tmp && curl -LO https://ziglang.org/download/0.14.0/zig-linux-aarch64-0.14.0.tar.xz && ( xzcat zig*xz | tar xf - ) && cd zig*/ && ln -s `pwd`/zig /usr/bin/zig )
 which qemu-arm || ( sudo apt-get -y update && sudo apt-get -y install qemu-user libc6-armhf-cross libc6-arm64-cross libc6-amd64-cross )
 
 # cross-compile extensions
