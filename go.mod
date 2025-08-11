@@ -5,7 +5,7 @@ go 1.23.0
 toolchain go1.24.1
 
 require (
-	github.com/aws/aws-sdk-go v1.55.7
+	github.com/aws/aws-sdk-go v1.55.8
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/johannesboyne/gofakes3 v0.0.0-20250402064820-d479899d8cbe
 	github.com/johncgriffin/overflow v0.0.0-20211019200055-46fa312c352c
