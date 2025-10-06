@@ -16,7 +16,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	go.riyazali.net/sqlite v0.0.0-20250204091031-8aa392720bb1
 	golang.org/x/crypto v0.41.0
-	google.golang.org/protobuf v1.36.8
+	google.golang.org/protobuf v1.36.10
 )
 
 require (
