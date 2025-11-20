@@ -15,7 +15,7 @@ require (
 	github.com/segmentio/ksuid v1.0.4
 	github.com/stretchr/testify v1.11.1
 	go.riyazali.net/sqlite v0.0.0-20250204091031-8aa392720bb1
-	golang.org/x/crypto v0.44.0
+	golang.org/x/crypto v0.45.0
 	google.golang.org/protobuf v1.36.10
 )
 
