@@ -9,7 +9,7 @@ jobs:
     steps:
     - name: Install sqlite headers and cross-compilation packages
       run: sudo apt-get install -y libsqlite3-dev qemu-user libc6-armhf-cross libc6-arm64-cross libc6-amd64-cross 
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: actions/setup-go@v6
       with:
         go-version: ^1.22.0
