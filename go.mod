@@ -11,14 +11,13 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.49
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/segmentio/ksuid v1.0.4
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.0
 	go.riyazali.net/sqlite v0.0.0-20250204091031-8aa392720bb1
 	golang.org/x/crypto v0.55.0
 	google.golang.org/protobuf v1.36.12
 )
 
 require (
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
